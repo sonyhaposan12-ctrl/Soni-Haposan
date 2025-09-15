@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import UploadIcon from './icons/UploadIcon';
 import HeadsetIcon from './icons/HeadsetIcon';
+import ClockIcon from './icons/ClockIcon';
 import { AppMode } from '../types';
 
 // Extend the global Window interface for TypeScript to recognize pdfjsLib
@@ -12,6 +13,8 @@ declare global {
 
 interface WelcomeScreenProps {
   onStart: (mode: AppMode, jobTitle: string, companyName: string, cvContent: string) => void;
+  onShowHistory: () => void;
+  hasHistory: boolean;
 }
 
 const setupTasks = [
@@ -20,7 +23,7 @@ const setupTasks = [
     { id: 'task3', text: 'Ensure your mic is set up correctly' },
 ];
 
-const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
+const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, hasHistory }) => {
     const [jobTitle, setJobTitle] = useState('');
     const [companyName, setCompanyName] = useState('');
     const [cvContent, setCvContent] = useState('');
@@ -102,7 +105,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
         } else if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
             const pdfjsLib = window.pdfjsLib;
             if (!pdfjsLib) {
-                setCvError('PDF parsing library is not available. Please refresh and try again.');
+                setCvError('PDF reader failed to load. You can still use .txt files or refresh the page.');
                 return;
             }
 
@@ -127,9 +130,15 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
                         fullText += textContent.items.map((item: any) => item.str).join(' ') + '\n\n';
                     }
                     saveCv(file.name, fullText.trim());
-                } catch (error) {
+                } catch (error: any) {
                     console.error('Error parsing PDF:', error);
-                    setCvError('Failed to parse the PDF. It might be corrupted or password-protected.');
+                    let message = 'Failed to parse the PDF.';
+                    if (error.name === 'PasswordException') {
+                        message = 'This PDF is password-protected and cannot be read.';
+                    } else if (error.name === 'InvalidPDFException') {
+                        message = 'This file does not appear to be a valid PDF.';
+                    }
+                    setCvError(message);
                     setCvFileName('');
                 } finally {
                     setIsParsingCv(false);
@@ -300,9 +309,25 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
                     Start Practice Session
                 </button>
             </div>
-            <p className="text-sm text-gray-400 mt-8 pb-4">
-                Make sure to allow microphone access when prompted.
-            </p>
+            
+            {hasHistory && (
+                 <button
+                    onClick={onShowHistory}
+                    className="mt-6 flex items-center gap-2 text-gray-400 hover:text-white transition-colors animate-fade-in"
+                 >
+                    <ClockIcon className="w-5 h-5" />
+                    <span>View Session History</span>
+                </button>
+            )}
+
+            <div className="mt-auto pt-4 text-center">
+                <p className="text-sm text-gray-400">
+                    Make sure to allow microphone access when prompted.
+                </p>
+                <p className="text-xs text-gray-500 mt-2">
+                    &copy; {new Date().getFullYear()} PT Josera Global IT Solusindo. All rights reserved.
+                </p>
+            </div>
         </div>
     );
 };

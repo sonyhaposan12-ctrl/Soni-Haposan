@@ -1,7 +1,7 @@
-
 import React, { useState } from 'react';
 import DocumentTextIcon from './icons/DocumentTextIcon';
 import ThumbsUpIcon from './icons/ThumbsUpIcon';
+import StarIcon from './icons/StarIcon';
 
 interface SummaryScreenProps {
   summary: string;
@@ -10,12 +10,17 @@ interface SummaryScreenProps {
 
 const SummaryScreen: React.FC<SummaryScreenProps> = ({ summary, onRestart }) => {
   const [feedbackText, setFeedbackText] = useState('');
+  const [starRating, setStarRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
   const [isFeedbackSubmitted, setIsFeedbackSubmitted] = useState(false);
 
   const handleSubmitFeedback = () => {
-    if (!feedbackText.trim()) return;
+    if (starRating === 0) return;
     // In a real application, you would send this feedback to a server.
-    console.log("User Feedback Submitted:", feedbackText);
+    console.log("User Feedback Submitted:", {
+      rating: starRating,
+      text: feedbackText.trim()
+    });
     setIsFeedbackSubmitted(true);
   };
 
@@ -37,18 +42,43 @@ const SummaryScreen: React.FC<SummaryScreenProps> = ({ summary, onRestart }) => 
         {!isFeedbackSubmitted ? (
           <div className="animate-fade-in">
             <h2 className="text-2xl font-bold mb-3 text-center">How was your experience?</h2>
-            <p className="text-gray-400 text-center mb-4">Help us improve the AI assistant by sharing your feedback.</p>
+            <p className="text-gray-400 text-center mb-4">Rate your session to help us improve the AI assistant.</p>
+            
+            <div className="flex justify-center gap-2 mb-4">
+              {[...Array(5)].map((_, index) => {
+                const ratingValue = index + 1;
+                return (
+                  <button
+                    key={ratingValue}
+                    onClick={() => setStarRating(ratingValue)}
+                    onMouseEnter={() => setHoverRating(ratingValue)}
+                    onMouseLeave={() => setHoverRating(0)}
+                    className="p-1 rounded-full focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                    aria-label={`Rate ${ratingValue} out of 5 stars`}
+                  >
+                    <StarIcon
+                      className={`w-10 h-10 transition-colors duration-200 ${
+                        ratingValue <= (hoverRating || starRating)
+                          ? 'text-yellow-400'
+                          : 'text-gray-600 hover:text-gray-500'
+                      }`}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+
             <textarea
               value={feedbackText}
               onChange={(e) => setFeedbackText(e.target.value)}
-              placeholder="Your feedback..."
+              placeholder="Tell us more... (Optional)"
               className="w-full bg-gray-700/50 border border-gray-600 rounded-lg p-4 text-white placeholder-gray-400 focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 outline-none transition"
-              rows={4}
+              rows={3}
               aria-label="Feedback input"
             />
             <button
               onClick={handleSubmitFeedback}
-              disabled={!feedbackText.trim()}
+              disabled={starRating === 0}
               className="mt-4 w-full bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-full text-lg transition-all duration-300"
             >
               Submit Feedback
@@ -58,7 +88,12 @@ const SummaryScreen: React.FC<SummaryScreenProps> = ({ summary, onRestart }) => 
           <div className="text-center bg-green-900/50 border border-green-700 rounded-lg p-6 animate-fade-in">
             <ThumbsUpIcon className="w-12 h-12 text-green-400 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-green-300">Thank you for your feedback!</h2>
-            <p className="text-gray-300">We appreciate you helping us make this tool better.</p>
+            <div className="flex justify-center gap-1 mt-2">
+              {[...Array(5)].map((_, i) => (
+                <StarIcon key={i} className={`w-6 h-6 ${i < starRating ? 'text-yellow-400' : 'text-gray-600'}`} />
+              ))}
+            </div>
+            <p className="text-gray-300 mt-2">We appreciate you helping us make this tool better.</p>
           </div>
         )}
       </div>
@@ -69,6 +104,10 @@ const SummaryScreen: React.FC<SummaryScreenProps> = ({ summary, onRestart }) => 
       >
           Start New Session
       </button>
+
+      <p className="text-xs text-gray-500 mt-6">
+        &copy; {new Date().getFullYear()} PT Josera Global IT Solusindo. All rights reserved.
+      </p>
     </div>
   );
 };

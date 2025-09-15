@@ -34,35 +34,46 @@ const Controls: React.FC<ControlsProps> = ({
     practiceState
 }) => {
     
-    const renderCopilotControls = () => (
-        <>
-            <div className="flex-1 min-w-0">
-                <p className="text-gray-400 text-sm truncate italic">
-                    {transcript ? `"${transcript}"` : 'Listening for interviewer...'}
-                </p>
-            </div>
-            <div className="flex items-center gap-2">
-                <button
-                    onClick={onGenerate}
-                    disabled={isProcessing}
-                    className="flex items-center space-x-2 bg-cyan-500 hover:bg-cyan-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-full transition-colors duration-300 transform hover:scale-105"
-                >
-                    <SparklesIcon className="w-5 h-5" />
-                    <span>{isProcessing ? 'Generating...' : 'Talking Points'}</span>
-                </button>
-                 <button
-                    onClick={onGenerateExample}
-                    disabled={isProcessing}
-                    className="flex items-center space-x-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-full transition-colors duration-300 transform hover:scale-105"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M18 5v8a2 2 0 01-2 2h-5l-5 4v-4H4a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2zM7 8H5v2h2V8zm2 0h2v2H9V8zm6 0h-2v2h2V8z" clipRule="evenodd" />
-                    </svg>
-                    <span>{isProcessing ? 'Generating...' : 'Example Answer'}</span>
-                </button>
-            </div>
-        </>
-    );
+    const renderCopilotControls = () => {
+        let statusText = 'Listening for interviewer...';
+        if (isProcessing) {
+            statusText = 'AI is generating suggestions...';
+        } else if (isListening && transcript) {
+            statusText = `"${transcript}"`;
+        } else if (isListening) {
+            statusText = 'Listening...';
+        }
+
+        return (
+            <>
+                <div className="flex-1 min-w-0">
+                    <p className="text-gray-400 text-sm truncate italic">
+                        {statusText}
+                    </p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={onGenerate}
+                        disabled={isProcessing}
+                        className="flex items-center space-x-2 bg-cyan-500 hover:bg-cyan-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-full transition-colors duration-300 transform hover:scale-105"
+                    >
+                        <SparklesIcon className="w-5 h-5" />
+                        <span>{isProcessing ? 'Generating...' : 'Talking Points'}</span>
+                    </button>
+                     <button
+                        onClick={onGenerateExample}
+                        disabled={isProcessing}
+                        className="flex items-center space-x-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-full transition-colors duration-300 transform hover:scale-105"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M18 5v8a2 2 0 01-2 2h-5l-5 4v-4H4a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2zM7 8H5v2h2V8zm2 0h2v2H9V8zm6 0h-2v2h2V8z" clipRule="evenodd" />
+                        </svg>
+                        <span>{isProcessing ? 'Generating...' : 'Example Answer'}</span>
+                    </button>
+                </div>
+            </>
+        );
+    }
 
     const renderPracticeControls = () => (
         <>
