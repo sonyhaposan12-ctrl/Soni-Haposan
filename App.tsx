@@ -1,14 +1,12 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ConversationItem, Role, AppMode, AppState } from './types';
 import { 
     startCopilotSession, 
     getTalkingPoints, 
-    CopilotResponse, 
+    getExampleAnswer,
     getInterviewSummary,
     startPracticeSession,
-    getPracticeResponse,
-    PracticeResponse
+    getPracticeResponse
 } from './services/geminiService';
 import type { Chat } from '@google/genai';
 import WelcomeScreen from './components/WelcomeScreen';
@@ -44,6 +42,7 @@ const App: React.FC = () => {
     const [appState, setAppState] = useState<AppState>('welcome');
     const [appMode, setAppMode] = useState<AppMode>('copilot');
     const [jobTitle, setJobTitle] = useState('');
+    const [companyName, setCompanyName] = useState('');
     const [conversation, setConversation] = useState<ConversationItem[]>([]);
     const [summaryReport, setSummaryReport] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -53,7 +52,8 @@ const App: React.FC = () => {
     });
 
     // Copilot State
-    const [talkingPoints, setTalkingPoints] = useState<string | null>(null);
+    const [feedbackContent, setFeedbackContent] = useState<string | null>(null);
+    const [feedbackTitle, setFeedbackTitle] = useState<string>('AI Talking Points');
     
     // Practice State
     const [practiceState, setPracticeState] = useState<PracticeState>('asking');
@@ -78,10 +78,6 @@ const App: React.FC = () => {
     useEffect(() => {
         localStorage.setItem('isTtsEnabled', JSON.stringify(isTtsEnabled));
     }, [isTtsEnabled]);
-    
-    useEffect(() => {
-        if (appMode === 'copilot' && talkingPoints) speakText(talkingPoints);
-    }, [talkingPoints, appMode, speakText]);
 
     useEffect(() => {
         if (appMode === 'practice' && feedback) speakText(feedback);
@@ -118,18 +114,19 @@ const App: React.FC = () => {
         recognitionRef.current = recognition;
     }, [finalTranscript]);
 
-    const handleStartSession = useCallback(async (mode: AppMode, title: string, cvContent: string) => {
+    const handleStartSession = useCallback(async (mode: AppMode, title: string, company: string, cvContent: string) => {
         setAppMode(mode);
         setJobTitle(title);
+        setCompanyName(company);
         setAppState('session');
         setupSpeechRecognition(mode);
         
         setIsProcessing(true);
         if (mode === 'copilot') {
-            chatRef.current = startCopilotSession(title, cvContent);
+            chatRef.current = startCopilotSession(title, company, cvContent);
             recognitionRef.current?.start();
         } else {
-            chatRef.current = startPracticeSession(title, cvContent);
+            chatRef.current = startPracticeSession(title, company, cvContent);
             const response = await getPracticeResponse(chatRef.current);
             if(response.question) {
                 setConversation([{ role: Role.MODEL, text: response.question }]);
@@ -145,15 +142,36 @@ const App: React.FC = () => {
         if (!finalTranscript.trim() || !chatRef.current) return;
         recognitionRef.current?.stop();
         setIsProcessing(true);
-        setTalkingPoints(null);
+        setFeedbackContent(null);
+        setFeedbackTitle('AI Talking Points');
         setConversation(prev => [...prev, { role: Role.MODEL, text: finalTranscript }]);
 
-        const response: CopilotResponse = await getTalkingPoints(chatRef.current, finalTranscript);
+        const response = await getTalkingPoints(chatRef.current, finalTranscript);
         if (response.talkingPoints) {
-            setTalkingPoints(response.talkingPoints);
-            setConversation(prev => [...prev, { role: Role.USER, text: response.talkingPoints }]);
+            setFeedbackContent(response.talkingPoints);
+            setConversation(prev => [...prev, { role: Role.USER, text: response.talkingPoints, type: 'talkingPoints' }]);
         }
         
+        setIsProcessing(false);
+        setTranscript('');
+        setFinalTranscript('');
+        recognitionRef.current?.start();
+    }, [finalTranscript]);
+
+    const handleGenerateExampleAnswer = useCallback(async () => {
+        if (!finalTranscript.trim() || !chatRef.current) return;
+        recognitionRef.current?.stop();
+        setIsProcessing(true);
+        setFeedbackContent(null);
+        setFeedbackTitle('AI Example Answer');
+        setConversation(prev => [...prev, { role: Role.MODEL, text: finalTranscript }]);
+
+        const response = await getExampleAnswer(chatRef.current, finalTranscript);
+        if (response.exampleAnswer) {
+            setFeedbackContent(response.exampleAnswer);
+            setConversation(prev => [...prev, { role: Role.USER, text: response.exampleAnswer, type: 'exampleAnswer' }]);
+        }
+
         setIsProcessing(false);
         setTranscript('');
         setFinalTranscript('');
@@ -208,23 +226,24 @@ const App: React.FC = () => {
         window.speechSynthesis.cancel();
         recognitionRef.current?.stop();
         setIsProcessing(true);
-        const summary = await getInterviewSummary(conversation, jobTitle, appMode);
+        const summary = await getInterviewSummary(conversation, jobTitle, companyName, appMode);
         setSummaryReport(summary);
         setAppState('summary');
         setIsProcessing(false);
-    }, [conversation, jobTitle, appMode]);
+    }, [conversation, jobTitle, companyName, appMode]);
 
     const handleResetApp = () => {
         window.speechSynthesis.cancel();
         setAppState('welcome');
         setConversation([]);
-        setTalkingPoints(null);
+        setFeedbackContent(null);
         setFeedback(null);
         setIsProcessing(false);
         setTranscript('');
         setFinalTranscript('');
         setSummaryReport(null);
         setJobTitle('');
+        setCompanyName('');
         chatRef.current = null;
         recognitionRef.current = null;
     };
@@ -245,6 +264,7 @@ const App: React.FC = () => {
                                 transcript={transcript || finalTranscript}
                                 // Copilot
                                 onGenerate={handleGenerateSuggestion}
+                                onGenerateExample={handleGenerateExampleAnswer}
                                 // Practice
                                 practiceState={practiceState}
                                 isListening={isListening}
@@ -254,10 +274,11 @@ const App: React.FC = () => {
                             />
                         </div>
                         <Feedback 
-                            title={appMode === 'copilot' ? 'AI Talking Points' : 'AI Feedback'}
-                            content={appMode === 'copilot' ? talkingPoints : feedback}
+                            title={appMode === 'copilot' ? feedbackTitle : 'AI Feedback'}
+                            content={appMode === 'copilot' ? feedbackContent : feedback}
                             isTtsEnabled={isTtsEnabled}
                             onToggleTts={() => setIsTtsEnabled(prev => !prev)}
+                            showTtsToggle={appMode === 'practice'}
                         />
                     </div>
                 );

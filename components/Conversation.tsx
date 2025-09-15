@@ -1,5 +1,3 @@
-
-
 import React, { useEffect, useRef } from 'react';
 import { ConversationItem, Role, AppMode } from '../types';
 
@@ -25,7 +23,11 @@ const Conversation: React.FC<ConversationProps> = ({ conversation, isProcessing,
                 const modelAvatarText = appMode === 'practice' ? 'AI' : 'IV';
                 const modelAvatarTitle = appMode === 'practice' ? 'AI Interviewer' : 'Interviewer';
 
-                const userLabel = appMode === 'practice' ? 'You:' : 'AI Suggestion:';
+                const userLabel = appMode === 'practice' 
+                    ? 'You:' 
+                    : item.type === 'exampleAnswer' 
+                        ? 'AI Example Answer:' 
+                        : 'AI Suggestion:';
                 const userAvatarText = appMode === 'practice' ? 'You' : 'AI';
                 const userAvatarTitle = appMode === 'practice' ? 'You' : 'AI Assistant';
 

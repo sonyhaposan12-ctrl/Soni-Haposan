@@ -1,4 +1,3 @@
-
 import React from 'react';
 import StopIcon from './icons/StopIcon';
 import SparklesIcon from './icons/SparklesIcon';
@@ -12,6 +11,7 @@ interface ControlsProps {
     onEndSession: () => void;
     // Copilot props
     onGenerate?: () => void;
+    onGenerateExample?: () => void;
     transcript?: string;
     // Practice props
     onStartListening?: () => void;
@@ -25,7 +25,8 @@ const Controls: React.FC<ControlsProps> = ({
     isProcessing, 
     isListening,
     onEndSession, 
-    onGenerate, 
+    onGenerate,
+    onGenerateExample, 
     transcript,
     onStartListening,
     onStopListening,
@@ -40,14 +41,26 @@ const Controls: React.FC<ControlsProps> = ({
                     {transcript ? `"${transcript}"` : 'Listening for interviewer...'}
                 </p>
             </div>
-            <button
-                onClick={onGenerate}
-                disabled={isProcessing}
-                className="flex items-center space-x-2 bg-cyan-500 hover:bg-cyan-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-full transition-colors duration-300 transform hover:scale-105"
-            >
-                <SparklesIcon className="w-5 h-5" />
-                <span>{isProcessing ? 'Generating...' : 'Generate Talking Points'}</span>
-            </button>
+            <div className="flex items-center gap-2">
+                <button
+                    onClick={onGenerate}
+                    disabled={isProcessing}
+                    className="flex items-center space-x-2 bg-cyan-500 hover:bg-cyan-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-full transition-colors duration-300 transform hover:scale-105"
+                >
+                    <SparklesIcon className="w-5 h-5" />
+                    <span>{isProcessing ? 'Generating...' : 'Talking Points'}</span>
+                </button>
+                 <button
+                    onClick={onGenerateExample}
+                    disabled={isProcessing}
+                    className="flex items-center space-x-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-full transition-colors duration-300 transform hover:scale-105"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M18 5v8a2 2 0 01-2 2h-5l-5 4v-4H4a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2zM7 8H5v2h2V8zm2 0h2v2H9V8zm6 0h-2v2h2V8z" clipRule="evenodd" />
+                    </svg>
+                    <span>{isProcessing ? 'Generating...' : 'Example Answer'}</span>
+                </button>
+            </div>
         </>
     );
 

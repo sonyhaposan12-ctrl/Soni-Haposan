@@ -1,4 +1,3 @@
-
 import React from 'react';
 import SparklesIcon from './icons/SparklesIcon';
 import SpeakerOnIcon from './icons/SpeakerOnIcon';
@@ -9,9 +8,10 @@ interface FeedbackProps {
     content: string | null;
     isTtsEnabled: boolean;
     onToggleTts: () => void;
+    showTtsToggle?: boolean;
 }
 
-const Feedback: React.FC<FeedbackProps> = ({ title, content, isTtsEnabled, onToggleTts }) => {
+const Feedback: React.FC<FeedbackProps> = ({ title, content, isTtsEnabled, onToggleTts, showTtsToggle = true }) => {
     return (
         <div className="w-full md:w-1/3 bg-gray-900/50 p-6 border-l border-gray-700 flex flex-col">
             <div className="flex justify-between items-center mb-4">
@@ -19,17 +19,19 @@ const Feedback: React.FC<FeedbackProps> = ({ title, content, isTtsEnabled, onTog
                     <SparklesIcon className="w-6 h-6 mr-2 text-cyan-400" />
                     {title}
                 </h2>
-                <button
-                    onClick={onToggleTts}
-                    className="p-2 rounded-full hover:bg-gray-700/50 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                    aria-label={isTtsEnabled ? "Disable audio feedback" : "Enable audio feedback"}
-                >
-                    {isTtsEnabled ? (
-                        <SpeakerOnIcon className="w-6 h-6 text-gray-300" />
-                    ) : (
-                        <SpeakerOffIcon className="w-6 h-6 text-gray-500" />
-                    )}
-                </button>
+                {showTtsToggle && (
+                    <button
+                        onClick={onToggleTts}
+                        className="p-2 rounded-full hover:bg-gray-700/50 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                        aria-label={isTtsEnabled ? "Disable audio feedback" : "Enable audio feedback"}
+                    >
+                        {isTtsEnabled ? (
+                            <SpeakerOnIcon className="w-6 h-6 text-gray-300" />
+                        ) : (
+                            <SpeakerOffIcon className="w-6 h-6 text-gray-500" />
+                        )}
+                    </button>
+                )}
             </div>
             <div className="flex-1 bg-gray-800 rounded-lg p-4 overflow-y-auto">
                 {content ? (
