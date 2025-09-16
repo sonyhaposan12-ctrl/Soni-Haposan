@@ -1,4 +1,4 @@
-import { GoogleGenAI, Chat, GenerateContentResponse, Type } from "@google/genai";
+import { GoogleGenAI, Chat, GenerateContentResponse, Type, Content } from "@google/genai";
 import { ConversationItem, Role, AppMode } from "../types";
 
 if (!process.env.API_KEY) {
@@ -27,15 +27,11 @@ const parseApiError = (error: any): string => {
 
 // --- Copilot Mode ---
 
-const createCopilotSystemInstruction = (jobTitle: string, companyName: string, cvContent: string, companyValues: string): string => {
+const createCopilotSystemInstruction = (jobTitle: string, companyName: string, cvContent: string): string => {
     let instruction = `You are an expert career coach and AI assistant. The user is currently in a live job interview for the "${jobTitle}" position${companyName ? ` at "${companyName}"` : ''}. Your role is to provide real-time, high-quality assistance to help them answer the interviewer's questions effectively. You will provide both concise talking points and a complete example answer.`;
 
     if (companyName) {
         instruction += `\n\n**Company Context:** The target company is "${companyName}". Use your knowledge about this company (its products, culture, values, recent news) to make your suggestions highly relevant. For example, align answers with the company's stated values or mission.`;
-    }
-
-    if (companyValues) {
-        instruction += `\n\n**Explicit Company Values:** The user has provided the following company values. You MUST incorporate these values into your responses where appropriate to show strong alignment with the company culture.\n--- COMPANY VALUES START ---\n${companyValues}\n--- COMPANY VALUES END ---`;
     }
 
     if (cvContent) {
@@ -48,18 +44,19 @@ const createCopilotSystemInstruction = (jobTitle: string, companyName: string, c
 
 Follow these rules strictly:
 1.  **JSON Response Format:** You MUST respond with a single, valid JSON object. Do not add any text or formatting outside this JSON object. The object MUST contain both "talkingPoints" and "exampleAnswer".
-2.  **Talking Points:** The "talkingPoints" value should be a string containing 3-4 concise, actionable bullet points. Use markdown for the bullet points (e.g., "- First point..."). **Bold** key skills or keywords that directly relate to the user's CV or the job description.
-3.  **Example Answer:** The "exampleAnswer" value should be a complete, well-structured paragraph. Use markdown for formatting, such as **bolding** key achievements or metrics to make them stand out. Break up longer answers into smaller paragraphs for readability.
-4.  **Personalization (CV & Company):** You MUST tailor all responses to the user's CV AND the company${companyName ? `, "${companyName}"` : ''}. Directly reference their skills, experiences, and projects from the CV. Connect these experiences to the company's needs, products, or values.${companyValues ? ' Crucially, you MUST align your answers with the explicit company values provided above.' : ''} For example, instead of "I have experience in X", say "In my role at [Previous Company], I spearheaded the project on Y, which demonstrates my expertise in X. I'm excited to apply this skill to ${companyName || 'your company'}'s work on [Company Project/Product]".
-5.  **HR Questions:** Be prepared to handle common questions from HR, such as "Tell me about yourself," "What are your weaknesses?", or "Why do you want to work here?". Your answer to "Why this company?" MUST be specific to "${companyName || 'this company'}".
-6.  **Structure:** For behavioral questions, structure your responses implicitly following the STAR method (Situation, Task, Action, Result) to create a compelling narrative.`;
+2.  **Highlighting from CV:** In both "talkingPoints" and "exampleAnswer", you MUST use markdown bolding (\`**text**\`) to highlight specific keywords, skills, project names, or metrics taken directly from the user's CV that are highly relevant to the interviewer's question. This is the most important rule. The user needs to see these highlights to quickly connect their experience to the question.
+3.  **Talking Points:** The "talkingPoints" value should be a string containing 3-4 concise, actionable bullet points (using markdown like "- Point..."). Each point should suggest a key theme for the user's answer.
+4.  **Example Answer:** The "exampleAnswer" value should be a complete, well-structured paragraph. Use markdown for formatting and break up longer answers into smaller paragraphs for readability.
+5.  **Personalization (CV & Company):** You MUST tailor all responses to the user's CV AND the company${companyName ? `, "${companyName}"` : ''}. Directly reference their skills, experiences, and projects from the CV. Connect these experiences to the company's needs, products, or values. For example, instead of "I have experience in X", say "In my role at [Previous Company], I spearheaded the project on Y, which demonstrates my expertise in X. I'm excited to apply this skill to ${companyName || 'your company'}'s work on [Company Project/Product]".
+6.  **HR Questions:** Be prepared to handle common questions from HR, such as "Tell me about yourself," "What are your weaknesses?", or "Why do you want to work here?". Your answer to "Why this company?" MUST be specific to "${companyName || 'this company'}".
+7.  **Structure:** For behavioral questions, structure your responses implicitly following the STAR method (Situation, Task, Action, Result) to create a compelling narrative.`;
     
     return instruction;
 };
 
 
-export const startCopilotSession = (jobTitle: string, companyName: string, cvContent: string, companyValues: string): Chat => {
-    const systemInstruction = createCopilotSystemInstruction(jobTitle, companyName, cvContent, companyValues);
+export const startCopilotSession = (jobTitle: string, companyName: string, cvContent: string): Chat => {
+    const systemInstruction = createCopilotSystemInstruction(jobTitle, companyName, cvContent);
     return ai.chats.create({
         model: 'gemini-2.5-flash',
         config: {
@@ -164,33 +161,50 @@ You MUST respond with a single, valid JSON object.
     return instruction;
 };
 
+const practiceSessionConfig = {
+    responseMimeType: "application/json",
+    responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+            feedback: {
+                type: Type.STRING,
+                description: "Feedback on the user's previous answer. Omit for the first question."
+            },
+            rating: {
+                type: Type.STRING,
+                description: "A rating for the user's answer: 'Needs Improvement', 'Good', or 'Excellent'."
+            },
+            question: {
+                type: Type.STRING,
+                description: "The next interview question to ask the user."
+            }
+        }
+    }
+};
+
 export const startPracticeSession = (jobTitle: string, companyName: string, cvContent: string): Chat => {
     const systemInstruction = createPracticeSystemInstruction(jobTitle, companyName, cvContent);
     return ai.chats.create({
         model: 'gemini-2.5-flash',
         config: {
             systemInstruction,
-            responseMimeType: "application/json",
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    feedback: {
-                        type: Type.STRING,
-                        description: "Feedback on the user's previous answer. Omit for the first question."
-                    },
-                    rating: {
-                        type: Type.STRING,
-                        description: "A rating for the user's answer: 'Needs Improvement', 'Good', or 'Excellent'."
-                    },
-                    question: {
-                        type: Type.STRING,
-                        description: "The next interview question to ask the user."
-                    }
-                }
-            }
+            ...practiceSessionConfig
         },
     });
 };
+
+export const restorePracticeSession = (jobTitle: string, companyName: string, cvContent: string, history: Content[]): Chat => {
+    const systemInstruction = createPracticeSystemInstruction(jobTitle, companyName, cvContent);
+    return ai.chats.create({
+        model: 'gemini-2.5-flash',
+        history,
+        config: {
+            systemInstruction,
+            ...practiceSessionConfig
+        },
+    });
+};
+
 
 export interface PracticeResponse {
     question: string;

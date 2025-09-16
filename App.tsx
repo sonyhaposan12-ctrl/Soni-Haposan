@@ -1,15 +1,16 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ConversationItem, Role, AppMode, AppState, SavedSession } from './types';
+import { ConversationItem, Role, AppMode, AppState, SavedSession, InProgressSession } from './types';
 import { 
     startCopilotSession, 
     getCopilotResponse,
     getInterviewSummary,
     startPracticeSession,
+    restorePracticeSession,
     getPracticeResponse
 } from './services/geminiService';
-import { getSessions, saveSession, clearSessions } from './services/storageService';
+import { getSessions, saveSession, clearSessions, saveInProgressSession, getInProgressSession, clearInProgressSession } from './services/storageService';
 import type { CopilotSuggestions } from './services/geminiService';
-import type { Chat } from '@google/genai';
+import type { Chat, Content } from '@google/genai';
 import WelcomeScreen from './components/WelcomeScreen';
 import Conversation from './components/Conversation';
 import Feedback from './components/Feedback';
@@ -17,6 +18,7 @@ import Controls from './components/Controls';
 import SummaryScreen from './components/SummaryScreen';
 import HistoryScreen from './components/HistoryScreen';
 import ErrorDisplay from './components/ErrorDisplay';
+import SettingsPanel from './components/SettingsPanel';
 
 // Fix: Add types for the Web Speech API to resolve TypeScript errors.
 interface SpeechRecognition extends EventTarget {
@@ -46,17 +48,21 @@ const App: React.FC = () => {
     const [appMode, setAppMode] = useState<AppMode>('copilot');
     const [jobTitle, setJobTitle] = useState('');
     const [companyName, setCompanyName] = useState('');
-    const [companyValues, setCompanyValues] = useState('');
+    const [cvContent, setCvContent] = useState('');
     const [conversation, setConversation] = useState<ConversationItem[]>([]);
     const [summaryReport, setSummaryReport] = useState<string | null>(null);
     const [sessions, setSessions] = useState<SavedSession[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [isTtsEnabled, setIsTtsEnabled] = useState<boolean>(() => {
-        const saved = localStorage.getItem('isTtsEnabled');
-        return saved !== null ? JSON.parse(saved) : true; // Default to on
-    });
     const [elapsedTime, setElapsedTime] = useState(0);
+    const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
     const [appError, setAppError] = useState<string | null>(null);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+    // Settings State
+    const [isTtsEnabled, setIsTtsEnabled] = useState<boolean>(() => JSON.parse(localStorage.getItem('isTtsEnabled') ?? 'true'));
+    const [recognitionLang, setRecognitionLang] = useState<string>(() => localStorage.getItem('recognitionLang') || 'en-US');
+    const [ttsVoiceURI, setTtsVoiceURI] = useState<string | null>(() => localStorage.getItem('ttsVoiceURI'));
+    
 
     // Copilot State
     const [feedbackContent, setFeedbackContent] = useState<string | null>(null);
@@ -86,13 +92,25 @@ const App: React.FC = () => {
         if (isTtsEnabled && text && 'speechSynthesis' in window) {
             window.speechSynthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(text);
+            if (ttsVoiceURI) {
+                const voices = window.speechSynthesis.getVoices();
+                const selectedVoice = voices.find(voice => voice.voiceURI === ttsVoiceURI);
+                if (selectedVoice) {
+                    utterance.voice = selectedVoice;
+                }
+            }
             window.speechSynthesis.speak(utterance);
         }
-    }, [isTtsEnabled]);
+    }, [isTtsEnabled, ttsVoiceURI]);
 
+    // Save settings whenever they change
+    useEffect(() => { localStorage.setItem('isTtsEnabled', JSON.stringify(isTtsEnabled)); }, [isTtsEnabled]);
+    useEffect(() => { localStorage.setItem('recognitionLang', recognitionLang); }, [recognitionLang]);
     useEffect(() => {
-        localStorage.setItem('isTtsEnabled', JSON.stringify(isTtsEnabled));
-    }, [isTtsEnabled]);
+        if (ttsVoiceURI) localStorage.setItem('ttsVoiceURI', ttsVoiceURI);
+        else localStorage.removeItem('ttsVoiceURI');
+    }, [ttsVoiceURI]);
+
 
     useEffect(() => {
         if (appMode === 'practice') {
@@ -143,10 +161,6 @@ const App: React.FC = () => {
         setFinalTranscript('');
     }, [finalTranscript, activeQuestion, copilotCache, conversation]);
 
-    const handleAutoGenerateSuggestion = useCallback(() => {
-        processCopilotRequest('talkingPoints');
-    }, [processCopilotRequest]);
-
     const setupSpeechRecognition = useCallback((mode: AppMode) => {
         if (!('webkitSpeechRecognition' in window)) {
             setAppError("Speech recognition is not supported by your browser. Please use Google Chrome.");
@@ -157,7 +171,7 @@ const App: React.FC = () => {
         const recognition = new window.webkitSpeechRecognition();
         recognition.continuous = mode === 'copilot';
         recognition.interimResults = true;
-        recognition.lang = 'en-US';
+        recognition.lang = recognitionLang;
 
         recognition.onstart = () => setIsListening(true);
         recognition.onend = () => {
@@ -195,24 +209,21 @@ const App: React.FC = () => {
             if (latestFinalTranscript) {
                 const newFinalTranscript = (finalTranscript + ' ' + latestFinalTranscript).trim();
                 setFinalTranscript(newFinalTranscript);
-
-                if (appMode === 'copilot') {
-                    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-                    debounceTimerRef.current = window.setTimeout(handleAutoGenerateSuggestion, 1500);
-                }
             }
         };
         
         recognitionRef.current = recognition;
-    }, [finalTranscript, appMode, handleAutoGenerateSuggestion]);
+    }, [finalTranscript, appMode, recognitionLang]);
 
-    const handleStartSession = useCallback(async (mode: AppMode, title: string, company: string, cvContent: string, values: string) => {
+    const handleStartSession = useCallback(async (mode: AppMode, title: string, company: string, cv: string) => {
         setAppError(null);
         setAppMode(mode);
         setJobTitle(title);
         setCompanyName(company);
-        setCompanyValues(values);
+        setCvContent(cv);
         setAppState('session');
+        const startTime = Date.now();
+        setSessionStartTime(startTime);
         isSessionActiveRef.current = true;
         setupSpeechRecognition(mode);
 
@@ -224,10 +235,10 @@ const App: React.FC = () => {
         
         setIsProcessing(true);
         if (mode === 'copilot') {
-            chatRef.current = startCopilotSession(title, company, cvContent, values);
+            chatRef.current = startCopilotSession(title, company, cv);
             recognitionRef.current?.start();
         } else {
-            chatRef.current = startPracticeSession(title, company, cvContent);
+            chatRef.current = startPracticeSession(title, company, cv);
             const response = await getPracticeResponse(chatRef.current);
             if(response.question) {
                 setConversation([{ role: Role.MODEL, text: response.question }]);
@@ -237,6 +248,101 @@ const App: React.FC = () => {
         }
         setIsProcessing(false);
     }, [setupSpeechRecognition, speakText]);
+
+    const reconstructPracticeHistory = (conv: ConversationItem[]): Content[] => {
+        const history: Content[] = [];
+        if (conv.length === 0) return history;
+    
+        // 1. Initial prompt from user is implicit, leading to the first question from model
+        history.push({ role: 'user', parts: [{ text: "Please ask me the first question." }] });
+        const firstModelResponse = conv[0];
+        history.push({ role: 'model', parts: [{ text: JSON.stringify({ question: firstModelResponse.text, feedback: null, rating: null }) }] });
+    
+        // 2. Loop through subsequent user answers and model feedback
+        for (let i = 1; i < conv.length; i += 2) {
+            const userAnswer = conv[i];
+            const modelFeedbackAndQuestion = conv[i + 1];
+    
+            if (userAnswer && userAnswer.role === Role.USER) {
+                history.push({ role: 'user', parts: [{ text: `Here is my answer: "${userAnswer.text}". Please provide feedback, a rating, and the next question.` }] });
+            }
+    
+            if (modelFeedbackAndQuestion && modelFeedbackAndQuestion.role === Role.MODEL) {
+                 history.push({ role: 'model', parts: [{ text: JSON.stringify({
+                     feedback: modelFeedbackAndQuestion.feedback,
+                     rating: modelFeedbackAndQuestion.rating,
+                     question: modelFeedbackAndQuestion.text
+                 }) }] });
+            }
+        }
+        return history;
+    }
+    
+    const handleRestoreSession = useCallback((session: InProgressSession) => {
+        setAppError(null);
+        setAppMode(session.mode);
+        setJobTitle(session.jobTitle);
+        setCompanyName(session.companyName);
+        setCvContent(session.cvContent);
+        setConversation(session.conversation);
+        setSessionStartTime(session.startTime);
+        setAppState('session');
+        isSessionActiveRef.current = true;
+
+        const timeSinceStart = Math.floor((Date.now() - session.startTime) / 1000);
+        setElapsedTime(timeSinceStart);
+        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = window.setInterval(() => {
+            setElapsedTime(prev => prev + 1);
+        }, 1000);
+
+        setupSpeechRecognition(session.mode);
+        setIsProcessing(true);
+
+        if (session.mode === 'copilot') {
+            chatRef.current = startCopilotSession(session.jobTitle, session.companyName, session.cvContent);
+            recognitionRef.current?.start();
+        } else {
+            const history = reconstructPracticeHistory(session.conversation);
+            chatRef.current = restorePracticeSession(session.jobTitle, session.companyName, session.cvContent, history);
+            
+            const lastMessage = session.conversation[session.conversation.length - 1];
+            if (lastMessage?.role === Role.MODEL) {
+                setPracticeState('asking');
+            } else {
+                 setPracticeState('feedback');
+            }
+        }
+        setIsProcessing(false);
+    }, [setupSpeechRecognition]);
+    
+    // Check for in-progress session on initial load
+    useEffect(() => {
+        const inProgressSession = getInProgressSession();
+        if (inProgressSession) {
+            const lastActive = new Date(inProgressSession.startTime).toLocaleString();
+            if (window.confirm(`You have an unfinished session from ${lastActive}. Would you like to restore it?`)) {
+                handleRestoreSession(inProgressSession);
+            } else {
+                clearInProgressSession();
+            }
+        }
+    }, [handleRestoreSession]);
+
+    // Auto-save session progress
+    useEffect(() => {
+        if (appState === 'session' && sessionStartTime) {
+            const sessionToSave: InProgressSession = {
+                startTime: sessionStartTime,
+                jobTitle,
+                companyName,
+                cvContent,
+                mode: appMode,
+                conversation,
+            };
+            saveInProgressSession(sessionToSave);
+        }
+    }, [conversation, appState, sessionStartTime, jobTitle, companyName, cvContent, appMode]);
     
     // --- Copilot Handlers ---
     const handleGenerateSuggestion = useCallback(() => processCopilotRequest('talkingPoints'), [processCopilotRequest]);
@@ -318,6 +424,7 @@ const App: React.FC = () => {
 
         setSummaryReport(summary);
         setAppState('summary');
+        clearInProgressSession();
         setIsProcessing(false);
     }, [conversation, jobTitle, companyName, appMode]);
 
@@ -330,7 +437,9 @@ const App: React.FC = () => {
             clearInterval(timerIntervalRef.current);
             timerIntervalRef.current = null;
         }
+        clearInProgressSession();
         setElapsedTime(0);
+        setSessionStartTime(null);
         setAppState('welcome');
         setConversation([]);
         setFeedbackContent(null);
@@ -340,7 +449,7 @@ const App: React.FC = () => {
         setSummaryReport(null);
         setJobTitle('');
         setCompanyName('');
-        setCompanyValues('');
+        setCvContent('');
         setActiveQuestion('');
         setCopilotCache(null);
         setAppError(null);
@@ -359,7 +468,7 @@ const App: React.FC = () => {
     const renderContent = () => {
         switch (appState) {
             case 'welcome':
-                return <WelcomeScreen onStart={handleStartSession} onShowHistory={handleShowHistory} hasHistory={sessions.length > 0} />;
+                return <WelcomeScreen onStart={handleStartSession} onShowHistory={handleShowHistory} hasHistory={sessions.length > 0} onOpenSettings={() => setIsSettingsOpen(true)}/>;
             case 'session': {
                 let practiceFeedbackContent: string | null = null;
                 let practiceFeedbackRating: ConversationItem['rating'] | null = null;
@@ -401,16 +510,26 @@ const App: React.FC = () => {
                             onToggleTts={() => setIsTtsEnabled(prev => !prev)}
                             showTtsToggle={appMode === 'practice'}
                             elapsedTime={elapsedTime}
+                            onOpenSettings={() => setIsSettingsOpen(true)}
+                            finalTranscript={finalTranscript}
+                            interimTranscript={transcript}
                         />
                     </div>
                 );
             }
             case 'summary':
-                 return summaryReport ? <SummaryScreen summary={summaryReport} onRestart={handleResetApp} /> : null;
+                 return summaryReport ? <SummaryScreen 
+                    summary={summaryReport} 
+                    onRestart={handleResetApp}
+                    conversation={conversation}
+                    appMode={appMode}
+                    jobTitle={jobTitle}
+                    companyName={companyName}
+                  /> : null;
             case 'history':
                 return <HistoryScreen sessions={sessions} onBack={handleResetApp} onClear={handleClearHistory} />;
             default:
-                return <WelcomeScreen onStart={handleStartSession} onShowHistory={handleShowHistory} hasHistory={sessions.length > 0} />;
+                return <WelcomeScreen onStart={handleStartSession} onShowHistory={handleShowHistory} hasHistory={sessions.length > 0} onOpenSettings={() => setIsSettingsOpen(true)}/>;
         }
     };
 
@@ -418,6 +537,16 @@ const App: React.FC = () => {
         <main className="bg-gray-800 h-screen w-screen flex flex-col font-sans overflow-hidden">
              <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-gray-900 via-gray-900 to-black -z-10"></div>
             {appError && <ErrorDisplay message={appError} onDismiss={() => setAppError(null)} />}
+            <SettingsPanel 
+                isOpen={isSettingsOpen}
+                onClose={() => setIsSettingsOpen(false)}
+                isTtsEnabled={isTtsEnabled}
+                onTtsToggle={setIsTtsEnabled}
+                recognitionLang={recognitionLang}
+                onRecognitionLangChange={setRecognitionLang}
+                ttsVoiceURI={ttsVoiceURI}
+                onTtsVoiceURIChange={setTtsVoiceURI}
+            />
             {renderContent()}
         </main>
     );

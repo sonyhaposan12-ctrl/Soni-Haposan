@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import UploadIcon from './icons/UploadIcon';
 import HeadsetIcon from './icons/HeadsetIcon';
 import ClockIcon from './icons/ClockIcon';
+import CogIcon from './icons/CogIcon';
 import { AppMode } from '../types';
 
 // Extend the global Window interface for TypeScript to recognize pdfjsLib
@@ -12,8 +13,9 @@ declare global {
 }
 
 interface WelcomeScreenProps {
-  onStart: (mode: AppMode, jobTitle: string, companyName: string, cvContent: string, companyValues: string) => void;
+  onStart: (mode: AppMode, jobTitle: string, companyName: string, cvContent: string) => void;
   onShowHistory: () => void;
+  onOpenSettings: () => void;
   hasHistory: boolean;
 }
 
@@ -23,16 +25,14 @@ const setupTasks = [
     { id: 'task3', text: 'Ensure your mic is set up correctly' },
 ];
 
-const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, hasHistory }) => {
+const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, onOpenSettings, hasHistory }) => {
     const [jobTitle, setJobTitle] = useState('');
     const [companyName, setCompanyName] = useState('');
-    const [companyValues, setCompanyValues] = useState('');
     const [cvContent, setCvContent] = useState('');
     const [cvFileName, setCvFileName] = useState('');
     const [isParsingCv, setIsParsingCv] = useState(false);
     const [jobTitleError, setJobTitleError] = useState('');
     const [companyNameError, setCompanyNameError] = useState('');
-    const [companyValuesError, setCompanyValuesError] = useState('');
     const [cvError, setCvError] = useState('');
     const [completedTasks, setCompletedTasks] = useState<Set<string>>(new Set());
     
@@ -40,7 +40,6 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, h
 
     const MAX_JOB_TITLE_LENGTH = 100;
     const MAX_COMPANY_NAME_LENGTH = 100;
-    const MAX_COMPANY_VALUES_LENGTH = 500;
     const MAX_CV_SIZE_MB = 5;
     const MAX_CV_SIZE_BYTES = MAX_CV_SIZE_MB * 1024 * 1024;
 
@@ -174,16 +173,10 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, h
         setCompanyName(e.target.value);
     };
 
-    const handleCompanyValuesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        if (companyValuesError) setCompanyValuesError('');
-        setCompanyValues(e.target.value);
-    };
-
     const validateAndStart = (mode: AppMode) => {
         let isValid = true;
         const trimmedJobTitle = jobTitle.trim();
         const trimmedCompanyName = companyName.trim();
-        const trimmedCompanyValues = companyValues.trim();
 
         if (!trimmedJobTitle) {
             setJobTitleError("Please enter the position you're applying for.");
@@ -198,14 +191,9 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, h
             isValid = false;
         }
 
-        if (trimmedCompanyValues.length > MAX_COMPANY_VALUES_LENGTH) {
-            setCompanyValuesError(`Company values must be ${MAX_COMPANY_VALUES_LENGTH} characters or less.`);
-            isValid = false;
-        }
-        
         if (isParsingCv) isValid = false;
 
-        if (isValid) onStart(mode, trimmedJobTitle, trimmedCompanyName, cvContent, trimmedCompanyValues);
+        if (isValid) onStart(mode, trimmedJobTitle, trimmedCompanyName, cvContent);
     };
 
     const uploadLabelText = isParsingCv 
@@ -217,7 +205,14 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, h
     const isStartDisabled = !jobTitle.trim() || isParsingCv;
 
     return (
-        <div className="flex flex-col items-center justify-center h-full text-center text-white p-8 overflow-y-auto">
+        <div className="flex flex-col items-center justify-center h-full text-center text-white p-8 overflow-y-auto relative">
+             <button
+                onClick={onOpenSettings}
+                className="absolute top-4 right-4 p-3 rounded-full text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors"
+                aria-label="Open settings"
+            >
+                <CogIcon className="w-6 h-6" />
+            </button>
             <div className="bg-white/10 p-6 rounded-full mb-6 backdrop-blur-sm">
                 <HeadsetIcon className="w-20 h-20 text-cyan-300" />
             </div>
@@ -226,7 +221,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, h
                 Your AI-powered assistant for job interviews. Choose between live assistance or a practice session to get started.
             </p>
 
-            <div className="w-full max-w-md space-y-2">
+            <div className="w-full max-w-md space-y-4">
                 <div>
                     <label htmlFor="job-title" className="sr-only">Position you're applying for</label>
                     <input 
@@ -256,21 +251,6 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, h
                         aria-describedby="company-name-error"
                     />
                     {companyNameError && <p id="company-name-error" className="text-red-400 text-sm mt-2">{companyNameError}</p>}
-                </div>
-                 <div>
-                    <label htmlFor="company-values" className="sr-only">Company Values (Optional)</label>
-                    <textarea
-                        id="company-values"
-                        value={companyValues}
-                        onChange={handleCompanyValuesChange}
-                        maxLength={MAX_COMPANY_VALUES_LENGTH}
-                        placeholder="Company Values (Optional, e.g., 'Innovation, Customer Obsession')"
-                        className={`w-full bg-gray-700/50 border text-white placeholder-gray-400 text-lg rounded-2xl py-3 px-6 focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 outline-none transition resize-none ${companyValuesError ? 'border-red-500 ring-red-500/50' : 'border-gray-600'}`}
-                        rows={2}
-                        aria-invalid={!!companyValuesError}
-                        aria-describedby="company-values-error"
-                    />
-                    {companyValuesError && <p id="company-values-error" className="text-red-400 text-sm mt-2">{companyValuesError}</p>}
                 </div>
                 <div className="pt-2 relative">
                      <label htmlFor="cv-upload" className={`w-full cursor-pointer bg-gray-700/50 border hover:border-cyan-400 text-gray-300 hover:text-white rounded-full py-3 pl-6 pr-10 flex items-center justify-center space-x-2 transition ${isParsingCv ? 'opacity-50 cursor-wait' : ''} ${cvError ? 'border-red-500' : 'border-gray-600'} ${cvContent ? 'border-cyan-500' : ''}`}>

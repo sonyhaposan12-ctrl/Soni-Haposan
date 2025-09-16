@@ -25,3 +25,12 @@ export interface SavedSession {
   conversation: ConversationItem[];
   summary: string;
 }
+
+export interface InProgressSession {
+  startTime: number;
+  jobTitle: string;
+  companyName: string;
+  cvContent: string;
+  mode: AppMode;
+  conversation: ConversationItem[];
+}

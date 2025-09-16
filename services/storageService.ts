@@ -1,6 +1,7 @@
-import { SavedSession } from '../types';
+import { SavedSession, InProgressSession } from '../types';
 
 const SESSIONS_STORAGE_KEY = 'interviewCopilotSessions';
+const IN_PROGRESS_SESSION_KEY = 'inProgressInterviewSession';
 
 export const getSessions = (): SavedSession[] => {
     try {
@@ -31,5 +32,33 @@ export const clearSessions = (): void => {
         localStorage.removeItem(SESSIONS_STORAGE_KEY);
     } catch (error) {
         console.error("Failed to clear sessions from localStorage", error);
+    }
+};
+
+// --- In-Progress Session Management ---
+
+export const saveInProgressSession = (session: InProgressSession): void => {
+    try {
+        localStorage.setItem(IN_PROGRESS_SESSION_KEY, JSON.stringify(session));
+    } catch (error) {
+        console.error("Failed to save in-progress session", error);
+    }
+};
+
+export const getInProgressSession = (): InProgressSession | null => {
+    try {
+        const savedSessionJson = localStorage.getItem(IN_PROGRESS_SESSION_KEY);
+        return savedSessionJson ? JSON.parse(savedSessionJson) : null;
+    } catch (error) {
+        console.error("Failed to parse in-progress session", error);
+        return null;
+    }
+};
+
+export const clearInProgressSession = (): void => {
+    try {
+        localStorage.removeItem(IN_PROGRESS_SESSION_KEY);
+    } catch (error) {
+        console.error("Failed to clear in-progress session", error);
     }
 };

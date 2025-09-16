@@ -4,6 +4,8 @@ import SpeakerOnIcon from './icons/SpeakerOnIcon';
 import SpeakerOffIcon from './icons/SpeakerOffIcon';
 import StarIcon from './icons/StarIcon';
 import ClockIcon from './icons/ClockIcon';
+import CogIcon from './icons/CogIcon';
+import MicIcon from './icons/MicIcon';
 import { ConversationItem } from '../types';
 
 interface FeedbackProps {
@@ -12,8 +14,11 @@ interface FeedbackProps {
     rating: ConversationItem['rating'] | null;
     isTtsEnabled: boolean;
     onToggleTts: () => void;
+    onOpenSettings: () => void;
     showTtsToggle?: boolean;
     elapsedTime: number;
+    finalTranscript?: string;
+    interimTranscript?: string;
 }
 
 declare global {
@@ -54,7 +59,31 @@ const formatTime = (totalSeconds: number): string => {
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 };
 
-const Feedback: React.FC<FeedbackProps> = ({ title, content, rating, isTtsEnabled, onToggleTts, showTtsToggle = true, elapsedTime }) => {
+const RealtimeTranscriptView: React.FC<{ finalTranscript?: string; interimTranscript?: string; }> = ({ finalTranscript, interimTranscript }) => {
+    return (
+        <div className="h-full flex flex-col">
+            <h3 className="text-lg font-semibold text-gray-400 mb-3 flex items-center gap-2 flex-shrink-0">
+                <MicIcon className="w-5 h-5" />
+                Live Transcript
+            </h3>
+            <div className="flex-1 bg-gray-900/50 rounded-lg p-4 overflow-y-auto min-h-0">
+                {finalTranscript || interimTranscript ? (
+                    <p className="text-gray-200 whitespace-pre-wrap">
+                        {finalTranscript}
+                        <span className="text-gray-500">{interimTranscript}</span>
+                    </p>
+                ) : (
+                    <div className="text-gray-500 h-full flex items-center justify-center">
+                        <p>Waiting for audio...</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+
+const Feedback: React.FC<FeedbackProps> = ({ title, content, rating, isTtsEnabled, onToggleTts, onOpenSettings, showTtsToggle = true, elapsedTime, finalTranscript, interimTranscript }) => {
     const isError = content?.toLowerCase().startsWith('error:');
     
     return (
@@ -64,7 +93,7 @@ const Feedback: React.FC<FeedbackProps> = ({ title, content, rating, isTtsEnable
                     <SparklesIcon className="w-6 h-6 mr-2 text-cyan-400" />
                     {title}
                 </h2>
-                <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-2">
                     <div className="flex items-center gap-2 text-lg font-mono text-gray-400 tracking-wider bg-gray-900 px-3 py-1 rounded-full border border-gray-700">
                         <ClockIcon className="w-5 h-5" />
                         <span>{formatTime(elapsedTime)}</span>
@@ -82,9 +111,16 @@ const Feedback: React.FC<FeedbackProps> = ({ title, content, rating, isTtsEnable
                             )}
                         </button>
                     )}
+                     <button
+                        onClick={onOpenSettings}
+                        className="p-2 rounded-full hover:bg-gray-700/50 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                        aria-label="Open settings"
+                    >
+                        <CogIcon className="w-6 h-6 text-gray-400 hover:text-white" />
+                    </button>
                 </div>
             </div>
-            <div className={`flex-1 bg-gray-800 rounded-lg p-4 overflow-y-auto transition-all ${isError ? 'border border-red-500/50' : ''}`}>
+            <div className={`flex-1 bg-gray-800 rounded-lg p-4 overflow-y-auto transition-all min-h-0 ${isError ? 'border border-red-500/50' : ''}`}>
                 {content ? (
                     <div>
                         {rating && (
@@ -98,6 +134,8 @@ const Feedback: React.FC<FeedbackProps> = ({ title, content, rating, isTtsEnable
                             dangerouslySetInnerHTML={{ __html: parseMarkdown(content) }}
                         />
                     </div>
+                 ) : (finalTranscript || interimTranscript) ? (
+                    <RealtimeTranscriptView finalTranscript={finalTranscript} interimTranscript={interimTranscript} />
                 ) : (
                     <div className="text-gray-500 h-full flex flex-col items-center justify-center text-center">
                        <SparklesIcon className="w-12 h-12 mb-4 text-gray-600" />
