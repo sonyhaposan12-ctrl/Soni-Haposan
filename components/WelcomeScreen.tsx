@@ -25,9 +25,9 @@ interface WelcomeScreenProps {
 }
 
 const setupTasks = [
-    { id: 'task1', text: 'For live calls, join your meeting (Meet, Zoom, Teams)' },
-    { id: 'task2', text: 'Use headphones to prevent audio echo' },
-    { id: 'task3', text: 'Ensure your mic is set up correctly' },
+    { id: 'task1', text: 'For live calls, join your meeting (Meet, Zoom, Teams) in a browser tab' },
+    { id: 'task2', text: 'For Live Assistance use speakers; for Practice use headphones' },
+    { id: 'task3', text: 'Ensure your mic is set up correctly in your system settings' },
 ];
 
 const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, onOpenSettings, hasHistory }) => {

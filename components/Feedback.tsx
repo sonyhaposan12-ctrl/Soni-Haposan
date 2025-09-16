@@ -5,8 +5,8 @@ import SpeakerOffIcon from './icons/SpeakerOffIcon';
 import StarIcon from './icons/StarIcon';
 import ClockIcon from './icons/ClockIcon';
 import CogIcon from './icons/CogIcon';
-import MicIcon from './icons/MicIcon';
 import { ConversationItem } from '../types';
+import RealtimeMonitor from './RealtimeMonitor';
 
 interface FeedbackProps {
     title: string;
@@ -17,6 +17,7 @@ interface FeedbackProps {
     onOpenSettings: () => void;
     showTtsToggle?: boolean;
     elapsedTime: number;
+    audioStream: MediaStream | null;
     finalTranscript?: string;
     interimTranscript?: string;
 }
@@ -59,31 +60,7 @@ const formatTime = (totalSeconds: number): string => {
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 };
 
-const RealtimeTranscriptView: React.FC<{ finalTranscript?: string; interimTranscript?: string; }> = ({ finalTranscript, interimTranscript }) => {
-    return (
-        <div className="h-full flex flex-col">
-            <h3 className="text-lg font-semibold text-gray-400 mb-3 flex items-center gap-2 flex-shrink-0">
-                <MicIcon className="w-5 h-5" />
-                Live Transcript
-            </h3>
-            <div className="flex-1 bg-gray-900/50 rounded-lg p-4 overflow-y-auto min-h-0">
-                {finalTranscript || interimTranscript ? (
-                    <p className="text-gray-200 whitespace-pre-wrap">
-                        {finalTranscript}
-                        <span className="text-gray-500">{interimTranscript}</span>
-                    </p>
-                ) : (
-                    <div className="text-gray-500 h-full flex items-center justify-center">
-                        <p>Waiting for audio...</p>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-};
-
-
-const Feedback: React.FC<FeedbackProps> = ({ title, content, rating, isTtsEnabled, onToggleTts, onOpenSettings, showTtsToggle = true, elapsedTime, finalTranscript, interimTranscript }) => {
+const Feedback: React.FC<FeedbackProps> = ({ title, content, rating, isTtsEnabled, onToggleTts, onOpenSettings, showTtsToggle = true, elapsedTime, audioStream, finalTranscript, interimTranscript }) => {
     const isError = content?.toLowerCase().startsWith('error:');
     
     return (
@@ -134,14 +111,12 @@ const Feedback: React.FC<FeedbackProps> = ({ title, content, rating, isTtsEnable
                             dangerouslySetInnerHTML={{ __html: parseMarkdown(content) }}
                         />
                     </div>
-                 ) : (finalTranscript || interimTranscript) ? (
-                    <RealtimeTranscriptView finalTranscript={finalTranscript} interimTranscript={interimTranscript} />
-                ) : (
-                    <div className="text-gray-500 h-full flex flex-col items-center justify-center text-center">
-                       <SparklesIcon className="w-12 h-12 mb-4 text-gray-600" />
-                       <p className="font-medium">Content will appear here.</p>
-                       <p className="text-sm">Follow the instructions in the control bar below.</p>
-                    </div>
+                 ) : (
+                    <RealtimeMonitor 
+                        audioStream={audioStream}
+                        finalTranscript={finalTranscript}
+                        interimTranscript={interimTranscript}
+                    />
                 )}
             </div>
         </div>

@@ -14,7 +14,7 @@ const parseApiError = (error: any): string => {
             return "Error: The AI service is not configured correctly (Invalid API Key). Please contact support.";
         }
         if (error.message.includes('429')) { // Quota exceeded
-            return "Error: The AI service is temporarily unavailable due to high demand. Please try again in a few moments.";
+            return "Error: Too many requests. Please wait a few seconds before trying again. This helps us keep the service stable for everyone.";
         }
     }
     // Check for network error

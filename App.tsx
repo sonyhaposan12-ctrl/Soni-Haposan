@@ -19,6 +19,7 @@ import SummaryScreen from './components/SummaryScreen';
 import HistoryScreen from './components/HistoryScreen';
 import ErrorDisplay from './components/ErrorDisplay';
 import SettingsPanel from './components/SettingsPanel';
+import AudioSetupModal from './components/AudioSetupModal';
 
 // Fix: Add types for the Web Speech API to resolve TypeScript errors.
 interface SpeechRecognition extends EventTarget {
@@ -43,6 +44,13 @@ declare global {
 
 type PracticeState = 'asking' | 'answering' | 'feedback';
 
+interface SessionStartArgs {
+    mode: AppMode;
+    title: string;
+    company: string;
+    cv: string;
+}
+
 const App: React.FC = () => {
     const [appState, setAppState] = useState<AppState>('welcome');
     const [appMode, setAppMode] = useState<AppMode>('copilot');
@@ -57,32 +65,35 @@ const App: React.FC = () => {
     const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
     const [appError, setAppError] = useState<string | null>(null);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [showAudioSetup, setShowAudioSetup] = useState(false);
+    const [sessionArgs, setSessionArgs] = useState<SessionStartArgs | null>(null);
 
     // Settings State
     const [isTtsEnabled, setIsTtsEnabled] = useState<boolean>(() => JSON.parse(localStorage.getItem('isTtsEnabled') ?? 'true'));
     const [recognitionLang, setRecognitionLang] = useState<string>(() => localStorage.getItem('recognitionLang') || 'en-US');
     const [ttsVoiceURI, setTtsVoiceURI] = useState<string | null>(() => localStorage.getItem('ttsVoiceURI'));
     
-
     // Copilot State
     const [feedbackContent, setFeedbackContent] = useState<string | null>(null);
     const [feedbackTitle, setFeedbackTitle] = useState<string>('AI Talking Points');
     const [activeQuestion, setActiveQuestion] = useState('');
     const [copilotCache, setCopilotCache] = useState<(CopilotSuggestions & { question: string }) | null>(null);
-    
+    const [isOnCooldown, setIsOnCooldown] = useState(false);
+    const [cooldownSeconds, setCooldownSeconds] = useState(0);
+
     // Practice State
     const [practiceState, setPracticeState] = useState<PracticeState>('asking');
     const [isListening, setIsListening] = useState(false);
 
-    // Shared State
+    // Shared State & Refs
     const [transcript, setTranscript] = useState('');
     const [finalTranscript, setFinalTranscript] = useState('');
-
+    const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
     const chatRef = useRef<Chat | null>(null);
     const recognitionRef = useRef<SpeechRecognition | null>(null);
     const timerIntervalRef = useRef<number | null>(null);
     const isSessionActiveRef = useRef<boolean>(false);
-    const debounceTimerRef = useRef<number | null>(null);
+    const cooldownIntervalRef = useRef<number | null>(null);
 
      useEffect(() => {
         setSessions(getSessions());
@@ -121,8 +132,26 @@ const App: React.FC = () => {
         }
     }, [conversation, appMode, speakText]);
 
+    const startCooldown = useCallback((seconds: number) => {
+        if (isOnCooldown) return; 
+        setIsOnCooldown(true);
+        setCooldownSeconds(seconds);
+
+        if (cooldownIntervalRef.current) clearInterval(cooldownIntervalRef.current);
+
+        cooldownIntervalRef.current = window.setInterval(() => {
+            setCooldownSeconds(prev => {
+                if (prev <= 1) {
+                    clearInterval(cooldownIntervalRef.current!);
+                    setIsOnCooldown(false);
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+    }, [isOnCooldown]);
+
     const processCopilotRequest = useCallback(async (type: 'talkingPoints' | 'exampleAnswer') => {
-        if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
         const question = finalTranscript.trim() || activeQuestion;
         if (!question || !chatRef.current) return;
 
@@ -140,26 +169,38 @@ const App: React.FC = () => {
             return;
         }
 
-        // Do not stop recognition here; let it run continuously.
         setIsProcessing(true);
         setFeedbackContent(null);
         
         const isNewQuestion = !conversation.some(item => item.role === Role.MODEL && item.text === question);
-        if (isNewQuestion) {
-             setConversation(prev => [...prev, { role: Role.MODEL, text: question }]);
-        }
         
         const response = await getCopilotResponse(chatRef.current, question);
+        
+        if (response.talkingPoints.includes("Too many requests")) {
+            setAppError(response.talkingPoints);
+            startCooldown(10);
+            setIsProcessing(false);
+            return;
+        }
+        
         setCopilotCache({ ...response, question: question });
         
         const content = type === 'talkingPoints' ? response.talkingPoints : response.exampleAnswer;
         setFeedbackContent(content);
-        setConversation(prev => [...prev, { role: Role.USER, text: content, type: type }]);
+        
+        setConversation(prev => {
+            const newConversation = [...prev];
+            if (isNewQuestion) {
+                newConversation.push({ role: Role.MODEL, text: question });
+            }
+            newConversation.push({ role: Role.USER, text: content, type: type });
+            return newConversation;
+        });
         
         setIsProcessing(false);
         setTranscript('');
         setFinalTranscript('');
-    }, [finalTranscript, activeQuestion, copilotCache, conversation]);
+    }, [finalTranscript, activeQuestion, copilotCache, conversation, startCooldown]);
 
     const setupSpeechRecognition = useCallback((mode: AppMode) => {
         if (!('webkitSpeechRecognition' in window)) {
@@ -186,7 +227,7 @@ const App: React.FC = () => {
                 setAppError("Microphone access denied. To fix this, go to your browser's site settings, allow microphone access for this page, and then refresh.");
                 isSessionActiveRef.current = false;
             } else if (event.error === 'no-speech') {
-                setAppError("No sound detected. Please ensure your microphone is unmuted and connected, then try speaking again. You may need to check your system's audio settings.");
+                // This error is common and doesn't require a user-facing error message.
             } else if (event.error !== 'aborted') {
                 setAppError("An error occurred with speech recognition. Please try again.");
             }
@@ -207,16 +248,40 @@ const App: React.FC = () => {
             setTranscript(interimTranscript);
 
             if (latestFinalTranscript) {
-                const newFinalTranscript = (finalTranscript + ' ' + latestFinalTranscript).trim();
-                setFinalTranscript(newFinalTranscript);
+                setFinalTranscript(prevTranscript => (prevTranscript + ' ' + latestFinalTranscript).trim());
             }
         };
         
         recognitionRef.current = recognition;
-    }, [finalTranscript, appMode, recognitionLang]);
+    }, [appMode, recognitionLang]);
+
+    const cleanupSession = useCallback(() => {
+        isSessionActiveRef.current = false;
+        window.speechSynthesis.cancel();
+        if (recognitionRef.current) {
+            recognitionRef.current.onend = null; // Prevent auto-restart on intentional stop
+            recognitionRef.current.stop();
+        }
+        if (timerIntervalRef.current) {
+            clearInterval(timerIntervalRef.current);
+            timerIntervalRef.current = null;
+        }
+        if (cooldownIntervalRef.current) {
+            clearInterval(cooldownIntervalRef.current);
+            cooldownIntervalRef.current = null;
+        }
+        if (audioStream) {
+            audioStream.getTracks().forEach(track => track.stop());
+            setAudioStream(null);
+        }
+        setShowAudioSetup(false);
+    }, [audioStream]);
+
 
     const handleStartSession = useCallback(async (mode: AppMode, title: string, company: string, cv: string) => {
         setAppError(null);
+        setShowAudioSetup(false);
+
         setAppMode(mode);
         setJobTitle(title);
         setCompanyName(company);
@@ -248,17 +313,44 @@ const App: React.FC = () => {
         }
         setIsProcessing(false);
     }, [setupSpeechRecognition, speakText]);
+    
+    const initiateSessionStart = useCallback(async (mode: AppMode, title: string, company: string, cv: string) => {
+        setAppError(null);
+        setSessionArgs({ mode, title, company, cv });
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            setAudioStream(stream);
+
+            if (mode === 'copilot') {
+                setShowAudioSetup(true);
+            } else {
+                handleStartSession(mode, title, company, cv);
+            }
+        } catch (err) {
+            console.error("getUserMedia error:", err);
+            setAppError("Microphone access is required. Please allow microphone access in your browser's settings for this site and refresh the page.");
+            setSessionArgs(null);
+        }
+    }, [handleStartSession]);
+
+    const cancelAudioSetup = useCallback(() => {
+        setShowAudioSetup(false);
+        setSessionArgs(null);
+        if (audioStream) {
+            audioStream.getTracks().forEach(track => track.stop());
+            setAudioStream(null);
+        }
+    }, [audioStream]);
 
     const reconstructPracticeHistory = (conv: ConversationItem[]): Content[] => {
         const history: Content[] = [];
         if (conv.length === 0) return history;
     
-        // 1. Initial prompt from user is implicit, leading to the first question from model
         history.push({ role: 'user', parts: [{ text: "Please ask me the first question." }] });
         const firstModelResponse = conv[0];
         history.push({ role: 'model', parts: [{ text: JSON.stringify({ question: firstModelResponse.text, feedback: null, rating: null }) }] });
     
-        // 2. Loop through subsequent user answers and model feedback
         for (let i = 1; i < conv.length; i += 2) {
             const userAnswer = conv[i];
             const modelFeedbackAndQuestion = conv[i + 1];
@@ -278,8 +370,20 @@ const App: React.FC = () => {
         return history;
     }
     
-    const handleRestoreSession = useCallback((session: InProgressSession) => {
+    const handleRestoreSession = useCallback(async (session: InProgressSession) => {
         setAppError(null);
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            setAudioStream(stream);
+        } catch (err) {
+             console.error("getUserMedia error on restore:", err);
+             clearInProgressSession();
+             setAppError("Could not restore session because microphone access was denied. Please allow access and start a new session.");
+             setAppState('welcome');
+             return;
+        }
+
         setAppMode(session.mode);
         setJobTitle(session.jobTitle);
         setCompanyName(session.companyName);
@@ -316,7 +420,6 @@ const App: React.FC = () => {
         setIsProcessing(false);
     }, [setupSpeechRecognition]);
     
-    // Check for in-progress session on initial load
     useEffect(() => {
         const inProgressSession = getInProgressSession();
         if (inProgressSession) {
@@ -329,7 +432,6 @@ const App: React.FC = () => {
         }
     }, [handleRestoreSession]);
 
-    // Auto-save session progress
     useEffect(() => {
         if (appState === 'session' && sessionStartTime) {
             const sessionToSave: InProgressSession = {
@@ -344,11 +446,9 @@ const App: React.FC = () => {
         }
     }, [conversation, appState, sessionStartTime, jobTitle, companyName, cvContent, appMode]);
     
-    // --- Copilot Handlers ---
     const handleGenerateSuggestion = useCallback(() => processCopilotRequest('talkingPoints'), [processCopilotRequest]);
     const handleGenerateExampleAnswer = useCallback(() => processCopilotRequest('exampleAnswer'), [processCopilotRequest]);
 
-    // --- Practice Handlers ---
     const handleStartListening = () => {
         setAppError(null);
         setTranscript('');
@@ -361,7 +461,7 @@ const App: React.FC = () => {
         isSessionActiveRef.current = false;
         recognitionRef.current?.stop();
         if (!finalTranscript.trim() || !chatRef.current) {
-            setPracticeState('asking'); // No answer, go back
+            setPracticeState('asking'); 
             return;
         }
         
@@ -382,7 +482,7 @@ const App: React.FC = () => {
         setTranscript('');
         setFinalTranscript('');
         setIsProcessing(false);
-        isSessionActiveRef.current = true; // Re-enable for next question
+        isSessionActiveRef.current = true;
     }, [finalTranscript]);
 
     const handleNextQuestion = async () => {
@@ -396,16 +496,8 @@ const App: React.FC = () => {
        setIsProcessing(false);
     };
 
-    // --- Global Handlers ---
     const handleEndSession = useCallback(async () => {
-        isSessionActiveRef.current = false;
-        window.speechSynthesis.cancel();
-        if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-        recognitionRef.current?.stop();
-        if (timerIntervalRef.current) {
-            clearInterval(timerIntervalRef.current);
-            timerIntervalRef.current = null;
-        }
+        cleanupSession();
         setIsProcessing(true);
         
         const summary = await getInterviewSummary(conversation, jobTitle, companyName, appMode);
@@ -426,17 +518,10 @@ const App: React.FC = () => {
         setAppState('summary');
         clearInProgressSession();
         setIsProcessing(false);
-    }, [conversation, jobTitle, companyName, appMode]);
+    }, [cleanupSession, conversation, jobTitle, companyName, appMode]);
 
-    const handleResetApp = () => {
-        isSessionActiveRef.current = false;
-        window.speechSynthesis.cancel();
-        if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-        recognitionRef.current?.stop();
-        if (timerIntervalRef.current) {
-            clearInterval(timerIntervalRef.current);
-            timerIntervalRef.current = null;
-        }
+    const handleResetApp = useCallback(() => {
+        cleanupSession();
         clearInProgressSession();
         setElapsedTime(0);
         setSessionStartTime(null);
@@ -454,8 +539,11 @@ const App: React.FC = () => {
         setCopilotCache(null);
         setAppError(null);
         chatRef.current = null;
-        recognitionRef.current = null;
-    };
+        setIsOnCooldown(false);
+        setCooldownSeconds(0);
+        setShowAudioSetup(false);
+        setSessionArgs(null);
+    }, [cleanupSession]);
 
     const handleShowHistory = () => setAppState('history');
 
@@ -464,11 +552,10 @@ const App: React.FC = () => {
         setSessions([]);
     };
 
-
     const renderContent = () => {
         switch (appState) {
             case 'welcome':
-                return <WelcomeScreen onStart={handleStartSession} onShowHistory={handleShowHistory} hasHistory={sessions.length > 0} onOpenSettings={() => setIsSettingsOpen(true)}/>;
+                return <WelcomeScreen onStart={initiateSessionStart} onShowHistory={handleShowHistory} hasHistory={sessions.length > 0} onOpenSettings={() => setIsSettingsOpen(true)}/>;
             case 'session': {
                 let practiceFeedbackContent: string | null = null;
                 let practiceFeedbackRating: ConversationItem['rating'] | null = null;
@@ -494,6 +581,8 @@ const App: React.FC = () => {
                                 // Copilot
                                 onGenerate={handleGenerateSuggestion}
                                 onGenerateExample={handleGenerateExampleAnswer}
+                                isOnCooldown={isOnCooldown}
+                                cooldownSeconds={cooldownSeconds}
                                 // Practice
                                 practiceState={practiceState}
                                 isListening={isListening}
@@ -511,6 +600,7 @@ const App: React.FC = () => {
                             showTtsToggle={appMode === 'practice'}
                             elapsedTime={elapsedTime}
                             onOpenSettings={() => setIsSettingsOpen(true)}
+                            audioStream={audioStream}
                             finalTranscript={finalTranscript}
                             interimTranscript={transcript}
                         />
@@ -529,7 +619,7 @@ const App: React.FC = () => {
             case 'history':
                 return <HistoryScreen sessions={sessions} onBack={handleResetApp} onClear={handleClearHistory} />;
             default:
-                return <WelcomeScreen onStart={handleStartSession} onShowHistory={handleShowHistory} hasHistory={sessions.length > 0} onOpenSettings={() => setIsSettingsOpen(true)}/>;
+                return <WelcomeScreen onStart={initiateSessionStart} onShowHistory={handleShowHistory} hasHistory={sessions.length > 0} onOpenSettings={() => setIsSettingsOpen(true)}/>;
         }
     };
 
@@ -537,6 +627,13 @@ const App: React.FC = () => {
         <main className="bg-gray-800 h-screen w-screen flex flex-col font-sans overflow-hidden">
              <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-gray-900 via-gray-900 to-black -z-10"></div>
             {appError && <ErrorDisplay message={appError} onDismiss={() => setAppError(null)} />}
+            {showAudioSetup && sessionArgs && (
+                <AudioSetupModal
+                    onConfirm={() => handleStartSession(sessionArgs.mode, sessionArgs.title, sessionArgs.company, sessionArgs.cv)}
+                    onCancel={cancelAudioSetup}
+                    audioStream={audioStream}
+                />
+            )}
             <SettingsPanel 
                 isOpen={isSettingsOpen}
                 onClose={() => setIsSettingsOpen(false)}
