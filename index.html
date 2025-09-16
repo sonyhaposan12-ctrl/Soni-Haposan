@@ -13,9 +13,21 @@
       .animate-fade-in {
         animation: fadeIn 0.5s ease-out forwards;
       }
+      /* Custom styles for rendered markdown */
+      .markdown-content p { margin-bottom: 0.75rem; }
+      .markdown-content p:last-child { margin-bottom: 0; }
+      .markdown-content strong, .markdown-content b { font-weight: 600; color: #ffffff; }
+      .markdown-content ul { list-style-type: disc; padding-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.75rem; }
+      .markdown-content ol { list-style-type: decimal; padding-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.75rem; }
+      .markdown-content li { margin-bottom: 0.25rem; }
+      .markdown-content li::marker { color: #9ca3af; } /* gray-400 */
+      .markdown-content h1, .markdown-content h2, .markdown-content h3, .markdown-content h4 { font-weight: 700; color: #ffffff; margin-top: 1.5rem; margin-bottom: 0.75rem; }
+      .markdown-content h2 { font-size: 1.25rem; color: #67e8f9; /* cyan-300 */ border-bottom: 1px solid #4b5563; padding-bottom: 0.25rem;}
+      .markdown-content h3 { font-size: 1.125rem; color: #a5b4fc; /* indigo-300 */}
     </style>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/pdfjs-dist@4.4.168/build/pdf.min.mjs" type="module"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script type="importmap">
 {
   "imports": {

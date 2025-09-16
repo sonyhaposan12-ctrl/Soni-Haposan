@@ -16,6 +16,25 @@ interface FeedbackProps {
     elapsedTime: number;
 }
 
+declare global {
+    interface Window {
+        marked: {
+            parse: (markdown: string, options?: object) => string;
+        };
+    }
+}
+
+const parseMarkdown = (text: string | null): string => {
+    if (!text) return '';
+    if (window.marked) {
+        // Use GFM and breaks for better formatting of typical AI responses.
+        return window.marked.parse(text, { breaks: true, gfm: true });
+    }
+    // Simple fallback if marked.js fails to load.
+    return text.replace(/\n/g, '<br />');
+};
+
+
 const getRatingClass = (rating: ConversationItem['rating']) => {
     switch (rating) {
         case 'Excellent':
@@ -74,7 +93,10 @@ const Feedback: React.FC<FeedbackProps> = ({ title, content, rating, isTtsEnable
                                 <span>{rating}</span>
                             </div>
                         )}
-                        <p className={`text-gray-300 whitespace-pre-wrap ${isError ? 'text-red-300' : ''}`}>{content}</p>
+                        <div
+                            className={`markdown-content text-gray-300 ${isError ? 'text-red-300' : ''}`}
+                            dangerouslySetInnerHTML={{ __html: parseMarkdown(content) }}
+                        />
                     </div>
                 ) : (
                     <div className="text-gray-500 h-full flex flex-col items-center justify-center text-center">

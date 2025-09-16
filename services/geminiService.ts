@@ -27,11 +27,15 @@ const parseApiError = (error: any): string => {
 
 // --- Copilot Mode ---
 
-const createCopilotSystemInstruction = (jobTitle: string, companyName: string, cvContent: string): string => {
+const createCopilotSystemInstruction = (jobTitle: string, companyName: string, cvContent: string, companyValues: string): string => {
     let instruction = `You are an expert career coach and AI assistant. The user is currently in a live job interview for the "${jobTitle}" position${companyName ? ` at "${companyName}"` : ''}. Your role is to provide real-time, high-quality assistance to help them answer the interviewer's questions effectively. You will provide both concise talking points and a complete example answer.`;
 
     if (companyName) {
         instruction += `\n\n**Company Context:** The target company is "${companyName}". Use your knowledge about this company (its products, culture, values, recent news) to make your suggestions highly relevant. For example, align answers with the company's stated values or mission.`;
+    }
+
+    if (companyValues) {
+        instruction += `\n\n**Explicit Company Values:** The user has provided the following company values. You MUST incorporate these values into your responses where appropriate to show strong alignment with the company culture.\n--- COMPANY VALUES START ---\n${companyValues}\n--- COMPANY VALUES END ---`;
     }
 
     if (cvContent) {
@@ -44,9 +48,9 @@ const createCopilotSystemInstruction = (jobTitle: string, companyName: string, c
 
 Follow these rules strictly:
 1.  **JSON Response Format:** You MUST respond with a single, valid JSON object. Do not add any text or formatting outside this JSON object. The object MUST contain both "talkingPoints" and "exampleAnswer".
-2.  **Talking Points:** The "talkingPoints" value should be a string containing 3-4 concise, actionable bullet points. Use markdown for the bullet points (e.g., "- First point...").
-3.  **Example Answer:** The "exampleAnswer" value should be a complete, well-structured paragraph. This answer should sound natural, confident, and professional.
-4.  **Personalization (CV & Company):** You MUST tailor all responses to the user's CV AND the company${companyName ? `, "${companyName}"` : ''}. Directly reference their skills, experiences, and projects from the CV. Connect these experiences to the company's needs, products, or values. For example, instead of "I have experience in X", say "In my role at [Previous Company], I spearheaded the project on Y, which demonstrates my expertise in X. I'm excited to apply this skill to ${companyName || 'your company'}'s work on [Company Project/Product]".
+2.  **Talking Points:** The "talkingPoints" value should be a string containing 3-4 concise, actionable bullet points. Use markdown for the bullet points (e.g., "- First point..."). **Bold** key skills or keywords that directly relate to the user's CV or the job description.
+3.  **Example Answer:** The "exampleAnswer" value should be a complete, well-structured paragraph. Use markdown for formatting, such as **bolding** key achievements or metrics to make them stand out. Break up longer answers into smaller paragraphs for readability.
+4.  **Personalization (CV & Company):** You MUST tailor all responses to the user's CV AND the company${companyName ? `, "${companyName}"` : ''}. Directly reference their skills, experiences, and projects from the CV. Connect these experiences to the company's needs, products, or values.${companyValues ? ' Crucially, you MUST align your answers with the explicit company values provided above.' : ''} For example, instead of "I have experience in X", say "In my role at [Previous Company], I spearheaded the project on Y, which demonstrates my expertise in X. I'm excited to apply this skill to ${companyName || 'your company'}'s work on [Company Project/Product]".
 5.  **HR Questions:** Be prepared to handle common questions from HR, such as "Tell me about yourself," "What are your weaknesses?", or "Why do you want to work here?". Your answer to "Why this company?" MUST be specific to "${companyName || 'this company'}".
 6.  **Structure:** For behavioral questions, structure your responses implicitly following the STAR method (Situation, Task, Action, Result) to create a compelling narrative.`;
     
@@ -54,8 +58,8 @@ Follow these rules strictly:
 };
 
 
-export const startCopilotSession = (jobTitle: string, companyName: string, cvContent: string): Chat => {
-    const systemInstruction = createCopilotSystemInstruction(jobTitle, companyName, cvContent);
+export const startCopilotSession = (jobTitle: string, companyName: string, cvContent: string, companyValues: string): Chat => {
+    const systemInstruction = createCopilotSystemInstruction(jobTitle, companyName, cvContent, companyValues);
     return ai.chats.create({
         model: 'gemini-2.5-flash',
         config: {
@@ -138,7 +142,7 @@ const createPracticeSystemInstruction = (jobTitle: string, companyName: string, 
     - 'Excellent': The answer is well-structured (like STAR), confident, directly relevant, and uses specific examples/metrics from their CV.
     - 'Good': The answer is solid but could be improved, e.g., by adding more specific details, being more concise, or better connecting to the company.
     - 'Needs Improvement': The answer is weak, generic, unstructured, or fails to answer the question effectively.
-- **Provide Actionable Advice:** Your feedback must be actionable. Instead of "Good answer," explain *why* it was good and how it could be even better. For example: "That was a strong example of teamwork. To elevate it, try to quantify the result. Your CV mentions you increased efficiency by 15% on that project—adding that number would make your answer more impactful."
+- **Provide Actionable Advice:** Your feedback must be actionable. Use markdown to structure your feedback (e.g., **bold text** for emphasis, bullet points for lists). Instead of "Good answer," explain *why* it was good and how it could be even better. For example: "That was a **strong example** of teamwork. To elevate it, try to quantify the result. Your CV mentions you **increased efficiency by 15%** on that project—adding that number would make your answer more impactful."
 - **CV & Company Integration:** Point out missed opportunities. If the user gives a generic answer, guide them to use a specific, more powerful example from their CV or to connect their answer more directly to "${companyName || 'the company'}".
 - Your feedback should be concise (2-4 sentences). Then, ask the next relevant question from a different category.`;
 

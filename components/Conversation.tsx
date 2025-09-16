@@ -8,6 +8,24 @@ interface ConversationProps {
     appMode: AppMode;
 }
 
+declare global {
+    interface Window {
+        marked: {
+            parse: (markdown: string, options?: object) => string;
+        };
+    }
+}
+
+const parseMarkdown = (text: string | null): string => {
+    if (!text) return '';
+    if (window.marked) {
+        // Use GFM and breaks for better formatting of typical AI responses.
+        return window.marked.parse(text, { breaks: true, gfm: true });
+    }
+    // Simple fallback if marked.js fails to load.
+    return text.replace(/\n/g, '<br />');
+};
+
 const getRatingClass = (rating: ConversationItem['rating']) => {
     switch (rating) {
         case 'Excellent':
@@ -64,16 +82,25 @@ const ConversationMessage: React.FC<{ item: ConversationItem, appMode: AppMode }
                         <div className="mb-3">
                             <p className="font-bold text-sm mb-2 text-gray-400">AI Feedback:</p>
                             <RatingBadge rating={item.rating} />
-                            <p className={`whitespace-pre-wrap mt-2 ${isFeedbackError ? 'text-red-300' : ''}`}>{item.feedback}</p>
+                            <div 
+                                className={`markdown-content mt-2 ${isFeedbackError ? 'text-red-300' : ''}`}
+                                dangerouslySetInnerHTML={{ __html: parseMarkdown(item.feedback) }} 
+                            />
                         </div>
                         <hr className="border-gray-600 my-3"/>
                         <p className="font-bold text-sm mb-1">{modelLabel}</p>
-                        <p className={`whitespace-pre-wrap ${isTextError ? 'text-red-300' : ''}`}>{item.text}</p>
+                         <div
+                            className={`markdown-content ${isTextError ? 'text-red-300' : ''}`}
+                            dangerouslySetInnerHTML={{ __html: parseMarkdown(item.text) }}
+                        />
                     </>
                ) : (
                     <>
                         <p className="font-bold text-sm mb-1">{isModel ? modelLabel : userLabel}</p>
-                        <p className="whitespace-pre-wrap">{item.text}</p>
+                        <div 
+                            className="markdown-content"
+                            dangerouslySetInnerHTML={{ __html: parseMarkdown(item.text) }}
+                        />
                     </>
                )}
                

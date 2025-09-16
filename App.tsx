@@ -46,6 +46,7 @@ const App: React.FC = () => {
     const [appMode, setAppMode] = useState<AppMode>('copilot');
     const [jobTitle, setJobTitle] = useState('');
     const [companyName, setCompanyName] = useState('');
+    const [companyValues, setCompanyValues] = useState('');
     const [conversation, setConversation] = useState<ConversationItem[]>([]);
     const [summaryReport, setSummaryReport] = useState<string | null>(null);
     const [sessions, setSessions] = useState<SavedSession[]>([]);
@@ -205,11 +206,12 @@ const App: React.FC = () => {
         recognitionRef.current = recognition;
     }, [finalTranscript, appMode, handleAutoGenerateSuggestion]);
 
-    const handleStartSession = useCallback(async (mode: AppMode, title: string, company: string, cvContent: string) => {
+    const handleStartSession = useCallback(async (mode: AppMode, title: string, company: string, cvContent: string, values: string) => {
         setAppError(null);
         setAppMode(mode);
         setJobTitle(title);
         setCompanyName(company);
+        setCompanyValues(values);
         setAppState('session');
         isSessionActiveRef.current = true;
         setupSpeechRecognition(mode);
@@ -222,7 +224,7 @@ const App: React.FC = () => {
         
         setIsProcessing(true);
         if (mode === 'copilot') {
-            chatRef.current = startCopilotSession(title, company, cvContent);
+            chatRef.current = startCopilotSession(title, company, cvContent, values);
             recognitionRef.current?.start();
         } else {
             chatRef.current = startPracticeSession(title, company, cvContent);
@@ -338,6 +340,7 @@ const App: React.FC = () => {
         setSummaryReport(null);
         setJobTitle('');
         setCompanyName('');
+        setCompanyValues('');
         setActiveQuestion('');
         setCopilotCache(null);
         setAppError(null);
@@ -377,7 +380,8 @@ const App: React.FC = () => {
                                 mode={appMode}
                                 isProcessing={isProcessing}
                                 onEndSession={handleEndSession}
-                                transcript={transcript || finalTranscript}
+                                finalTranscript={finalTranscript}
+                                interimTranscript={transcript}
                                 // Copilot
                                 onGenerate={handleGenerateSuggestion}
                                 onGenerateExample={handleGenerateExampleAnswer}

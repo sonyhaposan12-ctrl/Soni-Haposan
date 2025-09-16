@@ -8,6 +8,24 @@ interface SummaryScreenProps {
   onRestart: () => void;
 }
 
+declare global {
+    interface Window {
+        marked: {
+            parse: (markdown: string, options?: object) => string;
+        };
+    }
+}
+
+const parseMarkdown = (text: string | null): string => {
+    if (!text) return '';
+    if (window.marked) {
+        // Use GFM and breaks for better formatting of typical AI responses.
+        return window.marked.parse(text, { breaks: true, gfm: true });
+    }
+    // Simple fallback if marked.js fails to load.
+    return text.replace(/\n/g, '<br />');
+};
+
 const SummaryScreen: React.FC<SummaryScreenProps> = ({ summary, onRestart }) => {
   const [feedbackText, setFeedbackText] = useState('');
   const [starRating, setStarRating] = useState(0);
@@ -34,7 +52,10 @@ const SummaryScreen: React.FC<SummaryScreenProps> = ({ summary, onRestart }) => 
           Here's a breakdown of your performance with actionable feedback.
       </p>
       <div className="w-full max-w-3xl h-1/2 bg-gray-900/50 border border-gray-700 rounded-lg p-6 overflow-y-auto mb-8 flex-shrink-0">
-          <div className="text-gray-200 whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: summary.replace(/\n/g, '<br />') }}></div>
+          <div 
+            className="text-gray-200 markdown-content" 
+            dangerouslySetInnerHTML={{ __html: parseMarkdown(summary) }}
+          ></div>
       </div>
 
       {/* Feedback Section */}

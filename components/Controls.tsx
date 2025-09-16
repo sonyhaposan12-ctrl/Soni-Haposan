@@ -12,7 +12,8 @@ interface ControlsProps {
     // Copilot props
     onGenerate?: () => void;
     onGenerateExample?: () => void;
-    transcript?: string;
+    finalTranscript?: string;
+    interimTranscript?: string;
     // Practice props
     onStartListening?: () => void;
     onStopListening?: () => void;
@@ -27,7 +28,8 @@ const Controls: React.FC<ControlsProps> = ({
     onEndSession, 
     onGenerate,
     onGenerateExample, 
-    transcript,
+    finalTranscript,
+    interimTranscript,
     onStartListening,
     onStopListening,
     onNextQuestion,
@@ -35,11 +37,12 @@ const Controls: React.FC<ControlsProps> = ({
 }) => {
     
     const renderCopilotControls = () => {
+        const fullTranscript = [finalTranscript, interimTranscript].filter(Boolean).join(' ');
         let statusText = 'Listening for interviewer...';
         if (isProcessing) {
             statusText = 'AI is generating suggestions...';
-        } else if (isListening && transcript) {
-            statusText = `"${transcript}"`;
+        } else if (isListening && fullTranscript) {
+            statusText = `"${fullTranscript}"`;
         } else if (isListening) {
             statusText = 'Listening...';
         }
@@ -58,7 +61,7 @@ const Controls: React.FC<ControlsProps> = ({
                         className="flex items-center space-x-2 bg-cyan-500 hover:bg-cyan-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-full transition-colors duration-300 transform hover:scale-105"
                     >
                         <SparklesIcon className="w-5 h-5" />
-                        <span>{isProcessing ? 'Generating...' : 'Talking Points'}</span>
+                        <span>{isProcessing ? 'Thinking...' : 'Talking Points'}</span>
                     </button>
                      <button
                         onClick={onGenerateExample}
@@ -68,7 +71,7 @@ const Controls: React.FC<ControlsProps> = ({
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M18 5v8a2 2 0 01-2 2h-5l-5 4v-4H4a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2zM7 8H5v2h2V8zm2 0h2v2H9V8zm6 0h-2v2h2V8z" clipRule="evenodd" />
                         </svg>
-                        <span>{isProcessing ? 'Generating...' : 'Example Answer'}</span>
+                        <span>{isProcessing ? 'Drafting...' : 'Example Answer'}</span>
                     </button>
                 </div>
             </>
@@ -78,9 +81,24 @@ const Controls: React.FC<ControlsProps> = ({
     const renderPracticeControls = () => (
         <>
             <div className="flex-1 min-w-0">
-                <p className="text-gray-400 text-sm truncate italic">
-                    {isListening ? `Recording answer... "${transcript}"` : practiceState === 'feedback' ? "Review your feedback above." : "Ready for the next question."}
-                </p>
+                 <div className="text-gray-400 text-sm italic">
+                    {isListening ?
+                        <div>
+                            <span>Recording answer...</span>
+                            <p className="text-gray-200 mt-0.5">
+                                {finalTranscript}
+                                {interimTranscript && (
+                                    <span className="bg-cyan-500/20 text-cyan-200 px-1 rounded ml-1">
+                                        {interimTranscript}
+                                    </span>
+                                )}
+                            </p>
+                        </div>
+                        : practiceState === 'feedback'
+                            ? <p>Review your feedback above.</p>
+                            : <p>Ready for the next question.</p>
+                    }
+                </div>
             </div>
             {practiceState === 'asking' && (
                  <button
