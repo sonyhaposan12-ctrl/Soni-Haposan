@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import ExclamationIcon from './icons/ExclamationIcon';
 
 interface ErrorDisplayProps {
@@ -7,13 +7,6 @@ interface ErrorDisplayProps {
 }
 
 const ErrorDisplay: React.FC<ErrorDisplayProps> = ({ message, onDismiss }) => {
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      onDismiss();
-    }, 8000); // Auto-dismiss after 8 seconds
-
-    return () => clearTimeout(timer);
-  }, [message, onDismiss]);
 
   return (
     <div className="absolute top-4 left-1/2 -translate-x-1/2 w-full max-w-2xl z-50 animate-fade-in px-4">

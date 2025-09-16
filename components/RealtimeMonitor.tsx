@@ -81,17 +81,18 @@ interface RealtimeMonitorProps {
   audioStream: MediaStream | null;
   finalTranscript?: string;
   interimTranscript?: string;
+  showTranscript?: boolean;
 }
 
-const RealtimeMonitor: React.FC<RealtimeMonitorProps> = ({ audioStream, finalTranscript, interimTranscript }) => {
+const RealtimeMonitor: React.FC<RealtimeMonitorProps> = ({ audioStream, finalTranscript, interimTranscript, showTranscript = true }) => {
   return (
-    <div className="h-full flex flex-col">
+    <div className={showTranscript ? "h-full flex flex-col" : ""}>
       <h3 className="text-lg font-semibold text-gray-400 mb-3 flex items-center gap-2 flex-shrink-0">
         <MicIcon className="w-5 h-5" />
         Live Monitor
       </h3>
       
-      <div className="mb-4 p-4 bg-gray-900/50 rounded-lg">
+      <div className={`p-4 bg-gray-900/50 rounded-lg ${showTranscript ? 'mb-4' : ''}`}>
           <div className="flex items-center justify-between text-sm text-gray-400">
               <span>Microphone Input Level</span>
               <VolumeUpIcon className="w-5 h-5"/>
@@ -104,23 +105,25 @@ const RealtimeMonitor: React.FC<RealtimeMonitorProps> = ({ audioStream, finalTra
               )}
           </div>
            <p className="text-xs text-gray-500 mt-3 text-center">
-            If these bars don't move when the interviewer speaks, the app can't hear them. Try using speakers instead of headphones.
+            If these bars don't move when the interviewer speaks, the app can't hear them. Make sure you've shared the correct browser tab and enabled audio sharing.
           </p>
       </div>
       
-      <div className="flex-1 bg-gray-900/50 rounded-lg p-4 overflow-y-auto min-h-0">
-        <p className="text-gray-400 font-medium mb-2">Live Transcript</p>
-        {finalTranscript || interimTranscript ? (
-          <p className="text-gray-200 whitespace-pre-wrap">
-            {finalTranscript}
-            <span className="text-gray-500">{interimTranscript}</span>
-          </p>
-        ) : (
-          <div className="text-gray-500 h-full flex items-center justify-center">
-            <p>Waiting for speech...</p>
-          </div>
-        )}
-      </div>
+      {showTranscript && (
+        <div className="flex-1 bg-gray-900/50 rounded-lg p-4 overflow-y-auto min-h-0">
+          <p className="text-gray-400 font-medium mb-2">Live Transcript</p>
+          {finalTranscript || interimTranscript ? (
+            <p className="text-gray-200 whitespace-pre-wrap">
+              {finalTranscript}
+              <span className="text-gray-500">{interimTranscript}</span>
+            </p>
+          ) : (
+            <div className="text-gray-500 h-full flex items-center justify-center">
+              <p>Waiting for speech...</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

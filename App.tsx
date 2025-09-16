@@ -19,7 +19,7 @@ import SummaryScreen from './components/SummaryScreen';
 import HistoryScreen from './components/HistoryScreen';
 import ErrorDisplay from './components/ErrorDisplay';
 import SettingsPanel from './components/SettingsPanel';
-import AudioSetupModal from './components/AudioSetupModal';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Fix: Add types for the Web Speech API to resolve TypeScript errors.
 interface SpeechRecognition extends EventTarget {
@@ -44,13 +44,6 @@ declare global {
 
 type PracticeState = 'asking' | 'answering' | 'feedback';
 
-interface SessionStartArgs {
-    mode: AppMode;
-    title: string;
-    company: string;
-    cv: string;
-}
-
 const App: React.FC = () => {
     const [appState, setAppState] = useState<AppState>('welcome');
     const [appMode, setAppMode] = useState<AppMode>('copilot');
@@ -61,12 +54,9 @@ const App: React.FC = () => {
     const [summaryReport, setSummaryReport] = useState<string | null>(null);
     const [sessions, setSessions] = useState<SavedSession[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [elapsedTime, setElapsedTime] = useState(0);
     const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
     const [appError, setAppError] = useState<string | null>(null);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [showAudioSetup, setShowAudioSetup] = useState(false);
-    const [sessionArgs, setSessionArgs] = useState<SessionStartArgs | null>(null);
 
     // Settings State
     const [isTtsEnabled, setIsTtsEnabled] = useState<boolean>(() => JSON.parse(localStorage.getItem('isTtsEnabled') ?? 'true'));
@@ -91,7 +81,6 @@ const App: React.FC = () => {
     const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
     const chatRef = useRef<Chat | null>(null);
     const recognitionRef = useRef<SpeechRecognition | null>(null);
-    const timerIntervalRef = useRef<number | null>(null);
     const isSessionActiveRef = useRef<boolean>(false);
     const cooldownIntervalRef = useRef<number | null>(null);
 
@@ -102,7 +91,17 @@ const App: React.FC = () => {
     const speakText = useCallback((text: string) => {
         if (isTtsEnabled && text && 'speechSynthesis' in window) {
             window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
+            
+            // Strip markdown for a more natural speech synthesis
+            const cleanText = text
+                .replace(/(\*\*|__)(.*?)\1/g, '$2') // Bold
+                .replace(/(\*|_)(.*?)\1/g, '$2')   // Italic
+                .replace(/(\r\n|\n|\r)/gm, " ")    // Newlines
+                .replace(/^[#\s]*/gm, '')         // Headers
+                .replace(/^\s*-\s/gm, '. ')       // List items as sentences
+                .replace(/`([^`]+)`/g, '$1');     // Inline code
+
+            const utterance = new SpeechSynthesisUtterance(cleanText);
             if (ttsVoiceURI) {
                 const voices = window.speechSynthesis.getVoices();
                 const selectedVoice = voices.find(voice => voice.voiceURI === ttsVoiceURI);
@@ -123,6 +122,7 @@ const App: React.FC = () => {
     }, [ttsVoiceURI]);
 
 
+    // This hook is for Practice mode feedback
     useEffect(() => {
         if (appMode === 'practice') {
             const lastMessage = conversation[conversation.length - 1];
@@ -131,6 +131,13 @@ const App: React.FC = () => {
             }
         }
     }, [conversation, appMode, speakText]);
+
+    // This hook is for Copilot mode suggestions ('talkingPoints' and 'exampleAnswer')
+    useEffect(() => {
+        if (appMode === 'copilot' && feedbackContent) {
+            speakText(feedbackContent);
+        }
+    }, [feedbackContent, appMode, speakText]);
 
     const startCooldown = useCallback((seconds: number) => {
         if (isOnCooldown) return; 
@@ -262,10 +269,6 @@ const App: React.FC = () => {
             recognitionRef.current.onend = null; // Prevent auto-restart on intentional stop
             recognitionRef.current.stop();
         }
-        if (timerIntervalRef.current) {
-            clearInterval(timerIntervalRef.current);
-            timerIntervalRef.current = null;
-        }
         if (cooldownIntervalRef.current) {
             clearInterval(cooldownIntervalRef.current);
             cooldownIntervalRef.current = null;
@@ -274,13 +277,11 @@ const App: React.FC = () => {
             audioStream.getTracks().forEach(track => track.stop());
             setAudioStream(null);
         }
-        setShowAudioSetup(false);
     }, [audioStream]);
 
 
     const handleStartSession = useCallback(async (mode: AppMode, title: string, company: string, cv: string) => {
         setAppError(null);
-        setShowAudioSetup(false);
 
         setAppMode(mode);
         setJobTitle(title);
@@ -291,12 +292,6 @@ const App: React.FC = () => {
         setSessionStartTime(startTime);
         isSessionActiveRef.current = true;
         setupSpeechRecognition(mode);
-
-        setElapsedTime(0);
-        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = window.setInterval(() => {
-            setElapsedTime(prevTime => prevTime + 1);
-        }, 1000);
         
         setIsProcessing(true);
         if (mode === 'copilot') {
@@ -316,32 +311,41 @@ const App: React.FC = () => {
     
     const initiateSessionStart = useCallback(async (mode: AppMode, title: string, company: string, cv: string) => {
         setAppError(null);
-        setSessionArgs({ mode, title, company, cv });
 
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            setAudioStream(stream);
-
+            let stream: MediaStream;
             if (mode === 'copilot') {
-                setShowAudioSetup(true);
+                // For copilot, capture tab audio to hear the interviewer.
+                stream = await navigator.mediaDevices.getDisplayMedia({
+                    video: true, // Required to prompt for tab selection.
+                    audio: true,
+                });
+
+                if (stream.getAudioTracks().length === 0) {
+                    stream.getVideoTracks().forEach(track => track.stop()); // Clean up video track.
+                    setAppError("Audio sharing is required for Live Assistance. Please start again and be sure to check the 'Share tab audio' option when selecting your meeting tab.");
+                    return;
+                }
+                // We don't need the video, so stop the track for efficiency.
+                stream.getVideoTracks().forEach(track => track.stop());
             } else {
-                handleStartSession(mode, title, company, cv);
+                // For practice, capture the user's microphone.
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             }
-        } catch (err) {
-            console.error("getUserMedia error:", err);
-            setAppError("Microphone access is required. Please allow microphone access in your browser's settings for this site and refresh the page.");
-            setSessionArgs(null);
+            
+            setAudioStream(stream);
+            handleStartSession(mode, title, company, cv);
+
+        } catch (err: any) {
+            console.error("Media stream acquisition error:", err);
+            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                const modeText = mode === 'copilot' ? 'tab audio' : 'microphone';
+                setAppError(`Permission to capture ${modeText} was denied. To fix this, you may need to reset the permission in your browser's site settings (look for a 🔒 icon in the address bar), then refresh the page and try again.`);
+            } else {
+                setAppError("Could not access your microphone or tab audio. Please check your browser settings and try again.");
+            }
         }
     }, [handleStartSession]);
-
-    const cancelAudioSetup = useCallback(() => {
-        setShowAudioSetup(false);
-        setSessionArgs(null);
-        if (audioStream) {
-            audioStream.getTracks().forEach(track => track.stop());
-            setAudioStream(null);
-        }
-    }, [audioStream]);
 
     const reconstructPracticeHistory = (conv: ConversationItem[]): Content[] => {
         const history: Content[] = [];
@@ -374,12 +378,30 @@ const App: React.FC = () => {
         setAppError(null);
 
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            let stream: MediaStream;
+            if (session.mode === 'copilot') {
+                stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+                if (stream.getAudioTracks().length === 0) {
+                    stream.getVideoTracks().forEach(track => track.stop());
+                    clearInProgressSession();
+                    setAppError("Could not restore session: tab audio was not shared. Please start a new session.");
+                    setAppState('welcome');
+                    return;
+                }
+                stream.getVideoTracks().forEach(track => track.stop());
+            } else {
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            }
             setAudioStream(stream);
-        } catch (err) {
-             console.error("getUserMedia error on restore:", err);
+        } catch (err: any) {
+             console.error("Media stream acquisition error on restore:", err);
              clearInProgressSession();
-             setAppError("Could not restore session because microphone access was denied. Please allow access and start a new session.");
+             if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                 const modeText = session.mode === 'copilot' ? 'tab audio' : 'microphone';
+                 setAppError(`Could not restore the session because ${modeText} access was denied. Please check your browser's site settings to allow access, and then start a new session.`);
+             } else {
+                 setAppError("Could not restore session due to a media error. Please start a new session.");
+             }
              setAppState('welcome');
              return;
         }
@@ -392,13 +414,6 @@ const App: React.FC = () => {
         setSessionStartTime(session.startTime);
         setAppState('session');
         isSessionActiveRef.current = true;
-
-        const timeSinceStart = Math.floor((Date.now() - session.startTime) / 1000);
-        setElapsedTime(timeSinceStart);
-        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = window.setInterval(() => {
-            setElapsedTime(prev => prev + 1);
-        }, 1000);
 
         setupSpeechRecognition(session.mode);
         setIsProcessing(true);
@@ -523,7 +538,6 @@ const App: React.FC = () => {
     const handleResetApp = useCallback(() => {
         cleanupSession();
         clearInProgressSession();
-        setElapsedTime(0);
         setSessionStartTime(null);
         setAppState('welcome');
         setConversation([]);
@@ -541,8 +555,6 @@ const App: React.FC = () => {
         chatRef.current = null;
         setIsOnCooldown(false);
         setCooldownSeconds(0);
-        setShowAudioSetup(false);
-        setSessionArgs(null);
     }, [cleanupSession]);
 
     const handleShowHistory = () => setAppState('history');
@@ -557,6 +569,8 @@ const App: React.FC = () => {
             case 'welcome':
                 return <WelcomeScreen onStart={initiateSessionStart} onShowHistory={handleShowHistory} hasHistory={sessions.length > 0} onOpenSettings={() => setIsSettingsOpen(true)}/>;
             case 'session': {
+                if (!sessionStartTime) return null; // Should not happen
+
                 let practiceFeedbackContent: string | null = null;
                 let practiceFeedbackRating: ConversationItem['rating'] | null = null;
 
@@ -598,7 +612,7 @@ const App: React.FC = () => {
                             isTtsEnabled={isTtsEnabled}
                             onToggleTts={() => setIsTtsEnabled(prev => !prev)}
                             showTtsToggle={appMode === 'practice'}
-                            elapsedTime={elapsedTime}
+                            sessionStartTime={sessionStartTime}
                             onOpenSettings={() => setIsSettingsOpen(true)}
                             audioStream={audioStream}
                             finalTranscript={finalTranscript}
@@ -627,13 +641,6 @@ const App: React.FC = () => {
         <main className="bg-gray-800 h-screen w-screen flex flex-col font-sans overflow-hidden">
              <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-gray-900 via-gray-900 to-black -z-10"></div>
             {appError && <ErrorDisplay message={appError} onDismiss={() => setAppError(null)} />}
-            {showAudioSetup && sessionArgs && (
-                <AudioSetupModal
-                    onConfirm={() => handleStartSession(sessionArgs.mode, sessionArgs.title, sessionArgs.company, sessionArgs.cv)}
-                    onCancel={cancelAudioSetup}
-                    audioStream={audioStream}
-                />
-            )}
             <SettingsPanel 
                 isOpen={isSettingsOpen}
                 onClose={() => setIsSettingsOpen(false)}
@@ -644,7 +651,9 @@ const App: React.FC = () => {
                 ttsVoiceURI={ttsVoiceURI}
                 onTtsVoiceURIChange={setTtsVoiceURI}
             />
-            {renderContent()}
+            <ErrorBoundary onReset={handleResetApp}>
+              {renderContent()}
+            </ErrorBoundary>
         </main>
     );
 };

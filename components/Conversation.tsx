@@ -143,4 +143,4 @@ const Conversation: React.FC<ConversationProps> = ({ conversation, isProcessing,
     );
 };
 
-export default Conversation;
+export default React.memo(Conversation);

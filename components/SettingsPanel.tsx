@@ -66,26 +66,26 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in p-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby="settings-title"
     >
       <div
-        className="bg-gray-800 border border-gray-600 rounded-lg p-8 shadow-2xl max-w-lg w-full text-white"
+        className="bg-gray-800 border border-gray-600 rounded-lg shadow-2xl max-w-lg w-full text-white flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center mb-6">
+        <header className="flex justify-between items-center p-6 border-b border-gray-700 flex-shrink-0">
           <h2 id="settings-title" className="text-2xl font-bold text-white">Settings</h2>
           <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-700" aria-label="Close settings">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
-        </div>
+        </header>
 
-        <div className="space-y-6">
+        <main className="p-6 space-y-6 overflow-y-auto">
           {/* Recognition Language */}
           <div>
             <label htmlFor="recognition-lang" className="block text-sm font-medium text-gray-300 mb-2">
@@ -144,16 +144,16 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 <span>{isTtsEnabled ? 'Enabled' : 'Disabled'}</span>
             </button>
           </div>
-        </div>
+        </main>
 
-        <div className="mt-8 text-right">
+        <footer className="p-6 text-right border-t border-gray-700 flex-shrink-0 mt-auto">
           <button
             onClick={onClose}
             className="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-6 rounded-full transition-colors"
           >
             Done
           </button>
-        </div>
+        </footer>
       </div>
     </div>
   );

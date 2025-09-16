@@ -3,10 +3,10 @@ import SparklesIcon from './icons/SparklesIcon';
 import SpeakerOnIcon from './icons/SpeakerOnIcon';
 import SpeakerOffIcon from './icons/SpeakerOffIcon';
 import StarIcon from './icons/StarIcon';
-import ClockIcon from './icons/ClockIcon';
 import CogIcon from './icons/CogIcon';
 import { ConversationItem } from '../types';
 import RealtimeMonitor from './RealtimeMonitor';
+import TimerDisplay from './TimerDisplay';
 
 interface FeedbackProps {
     title: string;
@@ -16,7 +16,7 @@ interface FeedbackProps {
     onToggleTts: () => void;
     onOpenSettings: () => void;
     showTtsToggle?: boolean;
-    elapsedTime: number;
+    sessionStartTime: number;
     audioStream: MediaStream | null;
     finalTranscript?: string;
     interimTranscript?: string;
@@ -54,13 +54,7 @@ const getRatingClass = (rating: ConversationItem['rating']) => {
     }
 };
 
-const formatTime = (totalSeconds: number): string => {
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-};
-
-const Feedback: React.FC<FeedbackProps> = ({ title, content, rating, isTtsEnabled, onToggleTts, onOpenSettings, showTtsToggle = true, elapsedTime, audioStream, finalTranscript, interimTranscript }) => {
+const Feedback: React.FC<FeedbackProps> = ({ title, content, rating, isTtsEnabled, onToggleTts, onOpenSettings, showTtsToggle = true, sessionStartTime, audioStream, finalTranscript, interimTranscript }) => {
     const isError = content?.toLowerCase().startsWith('error:');
     
     return (
@@ -71,10 +65,7 @@ const Feedback: React.FC<FeedbackProps> = ({ title, content, rating, isTtsEnable
                     {title}
                 </h2>
                 <div className="flex items-center space-x-2">
-                    <div className="flex items-center gap-2 text-lg font-mono text-gray-400 tracking-wider bg-gray-900 px-3 py-1 rounded-full border border-gray-700">
-                        <ClockIcon className="w-5 h-5" />
-                        <span>{formatTime(elapsedTime)}</span>
-                    </div>
+                    <TimerDisplay startTime={sessionStartTime} />
                     {showTtsToggle && (
                         <button
                             onClick={onToggleTts}
@@ -123,4 +114,4 @@ const Feedback: React.FC<FeedbackProps> = ({ title, content, rating, isTtsEnable
     );
 };
 
-export default Feedback;
+export default React.memo(Feedback);
