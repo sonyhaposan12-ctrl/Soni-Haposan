@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import UploadIcon from './icons/UploadIcon';
-import HeadsetIcon from './icons/HeadsetIcon';
+import LogoIcon from './icons/LogoIcon';
 import ClockIcon from './icons/ClockIcon';
 import CogIcon from './icons/CogIcon';
 import LightbulbIcon from './icons/LightbulbIcon';
@@ -251,8 +251,8 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
             >
                 <CogIcon className="w-6 h-6" />
             </button>
-            <div className="bg-white/10 p-6 rounded-full mb-6 backdrop-blur-sm">
-                <HeadsetIcon className="w-20 h-20 text-cyan-300" />
+            <div className="mb-6">
+                <LogoIcon className="w-28 h-28" />
             </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-3 tracking-tight">AI Interview Copilot</h1>
             <p className="max-w-2xl text-lg text-gray-300 mb-8">
