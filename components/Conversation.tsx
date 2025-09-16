@@ -1,11 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import { ConversationItem, Role, AppMode } from '../types';
 import StarIcon from './icons/StarIcon';
+import { T } from '../translations';
 
 interface ConversationProps {
     conversation: ConversationItem[];
     isProcessing: boolean;
     appMode: AppMode;
+    translations: typeof T['en'];
 }
 
 declare global {
@@ -29,10 +31,13 @@ const parseMarkdown = (text: string | null): string => {
 const getRatingClass = (rating: ConversationItem['rating']) => {
     switch (rating) {
         case 'Excellent':
+        case 'Luar Biasa':
             return 'bg-green-500/20 text-green-300 border-green-500/30';
         case 'Good':
+        case 'Baik':
             return 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30';
         case 'Needs Improvement':
+        case 'Perlu Peningkatan':
             return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30';
         default:
             return 'bg-gray-600/20 text-gray-300 border-gray-500/30';
@@ -50,25 +55,25 @@ const RatingBadge: React.FC<{ rating: ConversationItem['rating']}> = ({ rating }
     );
 };
 
-const ConversationMessage: React.FC<{ item: ConversationItem, appMode: AppMode }> = React.memo(({ item, appMode }) => {
+const ConversationMessage: React.FC<{ item: ConversationItem, appMode: AppMode, translations: typeof T['en'] }> = React.memo(({ item, appMode, translations }) => {
     const isModel = item.role === Role.MODEL;
 
-    const modelLabel = appMode === 'practice' ? 'AI Interviewer:' : 'Interviewer Question:';
+    const modelLabel = appMode === 'practice' ? translations.roleAiInterviewer + ':' : translations.roleInterviewerQuestion + ':';
     const modelAvatarText = appMode === 'practice' ? 'AI' : 'IV';
-    const modelAvatarTitle = appMode === 'practice' ? 'AI Interviewer' : 'Interviewer';
+    const modelAvatarTitle = appMode === 'practice' ? translations.roleAiInterviewer : translations.roleInterviewer;
 
     const userLabel = appMode === 'practice' 
-        ? 'You:' 
+        ? translations.roleYou + ':'
         : item.type === 'exampleAnswer' 
-            ? 'AI Example Answer:' 
-            : 'AI Suggestion:';
-    const userAvatarText = appMode === 'practice' ? 'You' : 'AI';
-    const userAvatarTitle = appMode === 'practice' ? 'You' : 'AI Assistant';
+            ? translations.roleAiExample + ':'
+            : translations.roleAiSuggestion + ':';
+    const userAvatarText = appMode === 'practice' ? translations.roleYou : 'AI';
+    const userAvatarTitle = appMode === 'practice' ? translations.roleYou : translations.roleAiAssistant;
     
     const hasFeedback = appMode === 'practice' && item.feedback;
 
-    const isFeedbackError = item.feedback?.toLowerCase().startsWith('error:');
-    const isTextError = item.text.toLowerCase().includes('sorry, i encountered an error');
+    const isFeedbackError = item.feedback?.toLowerCase().includes('error:') || item.feedback?.toLowerCase().includes('kesalahan:');
+    const isTextError = item.text.toLowerCase().includes('sorry, i encountered an error') || item.text.toLowerCase().includes('maaf, saya mengalami kesalahan');
 
     return (
         <div className={`flex items-start gap-4 ${!isModel ? 'justify-end' : ''}`}>
@@ -80,7 +85,7 @@ const ConversationMessage: React.FC<{ item: ConversationItem, appMode: AppMode }
                {hasFeedback ? (
                     <>
                         <div className="mb-3">
-                            <p className="font-bold text-sm mb-2 text-gray-400">AI Feedback:</p>
+                            <p className="font-bold text-sm mb-2 text-gray-400">{translations.aiFeedback}:</p>
                             <RatingBadge rating={item.rating} />
                             <div 
                                 className={`markdown-content mt-2 ${isFeedbackError ? 'text-red-300' : ''}`}
@@ -114,7 +119,7 @@ const ConversationMessage: React.FC<{ item: ConversationItem, appMode: AppMode }
 
 // Fix: The Conversation component was corrupted, missing its implementation and default export.
 // It has been restored to correctly render messages, handle scrolling, and display a loading indicator.
-const Conversation: React.FC<ConversationProps> = ({ conversation, isProcessing, appMode }) => {
+const Conversation: React.FC<ConversationProps> = ({ conversation, isProcessing, appMode, translations }) => {
     const endOfMessagesRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
@@ -123,12 +128,12 @@ const Conversation: React.FC<ConversationProps> = ({ conversation, isProcessing,
     }, [conversation, isProcessing]);
 
     const modelAvatarText = appMode === 'practice' ? 'AI' : 'IV';
-    const modelAvatarTitle = appMode === 'practice' ? 'AI Interviewer' : 'Interviewer';
+    const modelAvatarTitle = appMode === 'practice' ? translations.roleAiInterviewer : translations.roleInterviewer;
 
     return (
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
             {conversation.map((item, index) => (
-                <ConversationMessage key={index} item={item} appMode={appMode} />
+                <ConversationMessage key={index} item={item} appMode={appMode} translations={translations} />
             ))}
             {isProcessing && (
                  <div className="flex items-start gap-4">

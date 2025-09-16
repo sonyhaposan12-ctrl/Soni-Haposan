@@ -1,22 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import SpeakerOnIcon from './icons/SpeakerOnIcon';
-import SpeakerOffIcon from './icons/SpeakerOffIcon';
-import PlayIcon from './icons/PlayIcon';
+import React from 'react';
+import { Language } from '../App';
+import { T } from '../translations';
 
 interface SettingsPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  isTtsEnabled: boolean;
-  onTtsToggle: (enabled: boolean) => void;
+  language: Language;
+  onLanguageChange: (lang: Language) => void;
   recognitionLang: string;
   onRecognitionLangChange: (lang: string) => void;
-  ttsVoiceURI: string | null;
-  onTtsVoiceURIChange: (uri: string) => void;
+  isAutoTriggerEnabled: boolean;
+  onIsAutoTriggerEnabledChange: (enabled: boolean) => void;
+  translations: typeof T['en'];
 }
 
 const supportedLanguages = [
   { value: 'en-US', label: 'English (United States)' },
   { value: 'en-GB', label: 'English (United Kingdom)' },
+  { value: 'id-ID', label: 'Bahasa Indonesia' },
   { value: 'es-ES', label: 'Español (España)' },
   { value: 'es-MX', label: 'Español (México)' },
   { value: 'fr-FR', label: 'Français (France)' },
@@ -31,54 +32,14 @@ const supportedLanguages = [
 const SettingsPanel: React.FC<SettingsPanelProps> = ({
   isOpen,
   onClose,
-  isTtsEnabled,
-  onTtsToggle,
+  language,
+  onLanguageChange,
   recognitionLang,
   onRecognitionLangChange,
-  ttsVoiceURI,
-  onTtsVoiceURIChange,
+  isAutoTriggerEnabled,
+  onIsAutoTriggerEnabledChange,
+  translations,
 }) => {
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const loadVoices = () => {
-      const availableVoices = window.speechSynthesis.getVoices();
-      if (availableVoices.length > 0) {
-        setVoices(availableVoices);
-      }
-    };
-
-    // Voices may load asynchronously.
-    loadVoices();
-    window.speechSynthesis.onvoiceschanged = loadVoices;
-
-    return () => {
-      window.speechSynthesis.onvoiceschanged = null;
-    };
-  }, [isOpen]);
-  
-  const handleTtsToggle = () => {
-      onTtsToggle(!isTtsEnabled);
-  }
-
-  const handlePreviewVoice = () => {
-    if (!ttsVoiceURI || !window.speechSynthesis) return;
-
-    window.speechSynthesis.cancel(); // Stop any current speech
-
-    const sampleText = "Hello, this is a preview of the selected voice.";
-    const utterance = new SpeechSynthesisUtterance(sampleText);
-    const selectedVoice = voices.find(voice => voice.voiceURI === ttsVoiceURI);
-
-    if (selectedVoice) {
-      utterance.voice = selectedVoice;
-      window.speechSynthesis.speak(utterance);
-    }
-  };
-
-
   if (!isOpen) return null;
 
   return (
@@ -94,8 +55,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex justify-between items-center p-6 border-b border-gray-700 flex-shrink-0">
-          <h2 id="settings-title" className="text-2xl font-bold text-white">Settings</h2>
-          <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-700" aria-label="Close settings">
+          <h2 id="settings-title" className="text-2xl font-bold text-white">{translations.settingsTitle}</h2>
+          <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-700" aria-label={translations.closeSettings}>
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -103,10 +64,27 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
         </header>
 
         <main className="p-6 space-y-6 overflow-y-auto">
+           {/* App Language */}
+          <div>
+            <label htmlFor="app-lang" className="block text-sm font-medium text-gray-300 mb-2">
+              {translations.appLanguage}
+            </label>
+            <select
+              id="app-lang"
+              value={language}
+              onChange={(e) => onLanguageChange(e.target.value as Language)}
+              className="w-full bg-gray-700/50 border border-gray-600 rounded-md py-2 px-3 focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 outline-none transition"
+            >
+              <option value="en">English</option>
+              <option value="id">Bahasa Indonesia</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">{translations.appLanguageDescription}</p>
+          </div>
+
           {/* Recognition Language */}
           <div>
             <label htmlFor="recognition-lang" className="block text-sm font-medium text-gray-300 mb-2">
-              Speech Recognition Language
+              {translations.recognitionLanguage}
             </label>
             <select
               id="recognition-lang"
@@ -118,60 +96,29 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 <option key={lang.value} value={lang.value}>{lang.label}</option>
               ))}
             </select>
-            <p className="text-xs text-gray-500 mt-1">Select the language you will be speaking for the most accurate transcription.</p>
+            <p className="text-xs text-gray-500 mt-1">{translations.recognitionLanguageDescription}</p>
           </div>
 
-          {/* TTS Voice */}
+          {/* Auto-trigger setting */}
           <div>
-            <label htmlFor="tts-voice" className="block text-sm font-medium text-gray-300 mb-2">
-              AI Voice (Text-to-Speech)
-            </label>
-            <div className="flex items-center gap-2">
-              <select
-                id="tts-voice"
-                value={ttsVoiceURI || ''}
-                onChange={(e) => onTtsVoiceURIChange(e.target.value)}
-                disabled={voices.length === 0}
-                className="flex-grow w-full bg-gray-700/50 border border-gray-600 rounded-md py-2 px-3 focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 outline-none transition disabled:opacity-50"
-              >
-                {voices.length > 0 ? (
-                  voices.map((voice) => (
-                    <option key={voice.voiceURI} value={voice.voiceURI}>
-                      {`${voice.name} (${voice.lang})`}
-                    </option>
-                  ))
-                ) : (
-                  <option>Loading voices...</option>
-                )}
-              </select>
-              <button
-                onClick={handlePreviewVoice}
-                disabled={!ttsVoiceURI || voices.length === 0}
-                className="p-2 rounded-full bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
-                aria-label="Preview selected voice"
-                title="Preview voice"
-              >
-                <PlayIcon className="w-5 h-5 text-white" />
-              </button>
-            </div>
-             <p className="text-xs text-gray-500 mt-1">Choose the voice for AI audio feedback. Options are based on your browser and OS.</p>
+              <label className="flex items-center justify-between cursor-pointer">
+                  <span className="flex flex-col">
+                      <span className="text-sm font-medium text-gray-300">{translations.autoSuggestTitle}</span>
+                      <span className="text-xs text-gray-500">{translations.autoSuggestDescription}</span>
+                  </span>
+                  <div className="relative inline-flex items-center cursor-pointer">
+                      <input
+                          type="checkbox"
+                          checked={isAutoTriggerEnabled}
+                          onChange={(e) => onIsAutoTriggerEnabledChange(e.target.checked)}
+                          className="sr-only peer"
+                          id="auto-trigger-toggle"
+                      />
+                      <div className="w-11 h-6 bg-gray-600 rounded-full peer peer-focus:ring-2 peer-focus:ring-cyan-500 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-500"></div>
+                  </div>
+              </label>
           </div>
 
-          {/* TTS Toggle */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Audio Feedback
-            </label>
-            <button
-                onClick={handleTtsToggle}
-                className={`w-full flex items-center justify-center gap-3 py-2 px-4 rounded-md transition-colors ${isTtsEnabled ? 'bg-cyan-500/20 text-cyan-300' : 'bg-gray-700 hover:bg-gray-600'}`}
-                role="switch"
-                aria-checked={isTtsEnabled}
-            >
-                {isTtsEnabled ? <SpeakerOnIcon className="w-5 h-5" /> : <SpeakerOffIcon className="w-5 h-5" />}
-                <span>{isTtsEnabled ? 'Enabled' : 'Disabled'}</span>
-            </button>
-          </div>
         </main>
 
         <footer className="p-6 text-right border-t border-gray-700 flex-shrink-0 mt-auto">
@@ -179,7 +126,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
             onClick={onClose}
             className="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-6 rounded-full transition-colors"
           >
-            Done
+            {translations.done}
           </button>
         </footer>
       </div>

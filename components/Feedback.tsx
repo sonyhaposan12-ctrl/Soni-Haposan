@@ -1,25 +1,22 @@
 import React from 'react';
 import SparklesIcon from './icons/SparklesIcon';
-import SpeakerOnIcon from './icons/SpeakerOnIcon';
-import SpeakerOffIcon from './icons/SpeakerOffIcon';
 import StarIcon from './icons/StarIcon';
 import CogIcon from './icons/CogIcon';
 import { ConversationItem } from '../types';
 import RealtimeMonitor from './RealtimeMonitor';
 import TimerDisplay from './TimerDisplay';
+import { T } from '../translations';
 
 interface FeedbackProps {
     title: string;
     content: string | null;
     rating: ConversationItem['rating'] | null;
-    isTtsEnabled: boolean;
-    onToggleTts: () => void;
     onOpenSettings: () => void;
-    showTtsToggle?: boolean;
     sessionStartTime: number;
     audioStream: MediaStream | null;
     finalTranscript?: string;
     interimTranscript?: string;
+    translations: typeof T['en'];
 }
 
 declare global {
@@ -44,18 +41,21 @@ const parseMarkdown = (text: string | null): string => {
 const getRatingClass = (rating: ConversationItem['rating']) => {
     switch (rating) {
         case 'Excellent':
+        case 'Luar Biasa':
             return 'bg-green-500/20 text-green-300 border-green-500/30';
         case 'Good':
+        case 'Baik':
             return 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30';
         case 'Needs Improvement':
+        case 'Perlu Peningkatan':
             return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30';
         default:
             return 'bg-gray-600/20 text-gray-300 border-gray-500/30';
     }
 };
 
-const Feedback: React.FC<FeedbackProps> = ({ title, content, rating, isTtsEnabled, onToggleTts, onOpenSettings, showTtsToggle = true, sessionStartTime, audioStream, finalTranscript, interimTranscript }) => {
-    const isError = content?.toLowerCase().startsWith('error:');
+const Feedback: React.FC<FeedbackProps> = ({ title, content, rating, onOpenSettings, sessionStartTime, audioStream, finalTranscript, interimTranscript, translations }) => {
+    const isError = content?.toLowerCase().startsWith('error:') || content?.toLowerCase().startsWith('kesalahan:');
     
     return (
         <div className="w-full md:w-1/3 bg-gray-900/50 p-6 border-l border-gray-700 flex flex-col">
@@ -66,23 +66,10 @@ const Feedback: React.FC<FeedbackProps> = ({ title, content, rating, isTtsEnable
                 </h2>
                 <div className="flex items-center space-x-2">
                     <TimerDisplay startTime={sessionStartTime} />
-                    {showTtsToggle && (
-                        <button
-                            onClick={onToggleTts}
-                            className="p-2 rounded-full hover:bg-gray-700/50 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                            aria-label={isTtsEnabled ? "Disable audio feedback" : "Enable audio feedback"}
-                        >
-                            {isTtsEnabled ? (
-                                <SpeakerOnIcon className="w-6 h-6 text-gray-300" />
-                            ) : (
-                                <SpeakerOffIcon className="w-6 h-6 text-gray-500" />
-                            )}
-                        </button>
-                    )}
                      <button
                         onClick={onOpenSettings}
                         className="p-2 rounded-full hover:bg-gray-700/50 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                        aria-label="Open settings"
+                        aria-label={translations.openSettings}
                     >
                         <CogIcon className="w-6 h-6 text-gray-400 hover:text-white" />
                     </button>
@@ -104,6 +91,7 @@ const Feedback: React.FC<FeedbackProps> = ({ title, content, rating, isTtsEnable
                     </div>
                  ) : (
                     <RealtimeMonitor 
+                        translations={translations}
                         audioStream={audioStream}
                         finalTranscript={finalTranscript}
                         interimTranscript={interimTranscript}

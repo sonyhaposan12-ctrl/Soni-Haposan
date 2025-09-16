@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import MicIcon from './icons/MicIcon';
 import VolumeUpIcon from './icons/VolumeUpIcon';
+import { T } from '../translations';
 
 interface MicrophoneVisualizerProps {
   audioStream: MediaStream;
@@ -82,36 +83,37 @@ interface RealtimeMonitorProps {
   finalTranscript?: string;
   interimTranscript?: string;
   showTranscript?: boolean;
+  translations: typeof T['en'];
 }
 
-const RealtimeMonitor: React.FC<RealtimeMonitorProps> = ({ audioStream, finalTranscript, interimTranscript, showTranscript = true }) => {
+const RealtimeMonitor: React.FC<RealtimeMonitorProps> = ({ audioStream, finalTranscript, interimTranscript, showTranscript = true, translations }) => {
   return (
     <div className={showTranscript ? "h-full flex flex-col" : ""}>
       <h3 className="text-lg font-semibold text-gray-400 mb-3 flex items-center gap-2 flex-shrink-0">
         <MicIcon className="w-5 h-5" />
-        Live Monitor
+        {translations.liveMonitor}
       </h3>
       
       <div className={`p-4 bg-gray-900/50 rounded-lg ${showTranscript ? 'mb-4' : ''}`}>
           <div className="flex items-center justify-between text-sm text-gray-400">
-              <span>Microphone Input Level</span>
+              <span>{translations.micInputLevel}</span>
               <VolumeUpIcon className="w-5 h-5"/>
           </div>
           <div className="mt-2">
               {audioStream ? (
                   <MicrophoneVisualizer audioStream={audioStream} />
               ) : (
-                  <div className="text-gray-500 text-xs text-center h-8 flex items-center justify-center">Microphone not active.</div>
+                  <div className="text-gray-500 text-xs text-center h-8 flex items-center justify-center">{translations.micNotActive}</div>
               )}
           </div>
            <p className="text-xs text-gray-500 mt-3 text-center">
-            If these bars don't move when the interviewer speaks, the app can't hear them. Make sure you've shared the correct browser tab and enabled audio sharing.
+            {translations.micCheckHelpText}
           </p>
       </div>
       
       {showTranscript && (
         <div className="flex-1 bg-gray-900/50 rounded-lg p-4 overflow-y-auto min-h-0">
-          <p className="text-gray-400 font-medium mb-2">Live Transcript</p>
+          <p className="text-gray-400 font-medium mb-2">{translations.liveTranscript}</p>
           {finalTranscript || interimTranscript ? (
             <p className="text-gray-200 whitespace-pre-wrap">
               {finalTranscript}
@@ -119,7 +121,7 @@ const RealtimeMonitor: React.FC<RealtimeMonitorProps> = ({ audioStream, finalTra
             </p>
           ) : (
             <div className="text-gray-500 h-full flex items-center justify-center">
-              <p>Waiting for speech...</p>
+              <p>{translations.waitingForSpeech}</p>
             </div>
           )}
         </div>

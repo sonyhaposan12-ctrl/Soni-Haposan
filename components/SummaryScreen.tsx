@@ -4,6 +4,7 @@ import ThumbsUpIcon from './icons/ThumbsUpIcon';
 import StarIcon from './icons/StarIcon';
 import TranscriptModal from './TranscriptModal';
 import { ConversationItem, AppMode } from '../types';
+import { T } from '../translations';
 
 interface SummaryScreenProps {
   summary: string;
@@ -12,6 +13,7 @@ interface SummaryScreenProps {
   appMode: AppMode;
   jobTitle: string;
   companyName: string;
+  translations: typeof T['en'];
 }
 
 declare global {
@@ -32,7 +34,7 @@ const parseMarkdown = (text: string | null): string => {
     return text.replace(/\n/g, '<br />');
 };
 
-const SummaryScreen: React.FC<SummaryScreenProps> = ({ summary, onRestart, conversation, appMode, jobTitle, companyName }) => {
+const SummaryScreen: React.FC<SummaryScreenProps> = ({ summary, onRestart, conversation, appMode, jobTitle, companyName, translations }) => {
   const [feedbackText, setFeedbackText] = useState('');
   const [starRating, setStarRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
@@ -59,14 +61,15 @@ const SummaryScreen: React.FC<SummaryScreenProps> = ({ summary, onRestart, conve
         jobTitle={jobTitle}
         companyName={companyName}
         sessionDate={new Date().toLocaleString()}
+        translations={translations}
       />
       <div className="flex flex-col items-center justify-center h-full text-white p-8 animate-fade-in overflow-y-auto">
         <div className="bg-white/10 p-6 rounded-full mb-6 backdrop-blur-sm flex-shrink-0">
             <DocumentTextIcon className="w-20 h-20 text-cyan-300" />
         </div>
-        <h1 className="text-4xl md:text-5xl font-bold mb-3 tracking-tight">Session Summary</h1>
+        <h1 className="text-4xl md:text-5xl font-bold mb-3 tracking-tight">{translations.summaryTitle}</h1>
         <p className="max-w-3xl text-lg text-gray-300 mb-8 text-center">
-            Here's a breakdown of your performance with actionable feedback.
+            {translations.summaryDescription}
         </p>
         <div className="w-full max-w-3xl h-1/2 bg-gray-900/50 border border-gray-700 rounded-lg p-6 overflow-y-auto mb-8 flex-shrink-0">
             <div 
@@ -79,8 +82,8 @@ const SummaryScreen: React.FC<SummaryScreenProps> = ({ summary, onRestart, conve
         <div className="w-full max-w-3xl mb-8">
           {!isFeedbackSubmitted ? (
             <div className="animate-fade-in">
-              <h2 className="text-2xl font-bold mb-3 text-center">How was your experience?</h2>
-              <p className="text-gray-400 text-center mb-4">Rate your session to help us improve the AI assistant.</p>
+              <h2 className="text-2xl font-bold mb-3 text-center">{translations.feedbackTitle}</h2>
+              <p className="text-gray-400 text-center mb-4">{translations.feedbackDescription}</p>
               
               <div className="flex justify-center gap-2 mb-4">
                 {[...Array(5)].map((_, index) => {
@@ -92,7 +95,7 @@ const SummaryScreen: React.FC<SummaryScreenProps> = ({ summary, onRestart, conve
                       onMouseEnter={() => setHoverRating(ratingValue)}
                       onMouseLeave={() => setHoverRating(0)}
                       className="p-1 rounded-full focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                      aria-label={`Rate ${ratingValue} out of 5 stars`}
+                      aria-label={translations.feedbackAriaLabel(ratingValue)}
                     >
                       <StarIcon
                         className={`w-10 h-10 transition-colors duration-200 ${
@@ -109,7 +112,7 @@ const SummaryScreen: React.FC<SummaryScreenProps> = ({ summary, onRestart, conve
               <textarea
                 value={feedbackText}
                 onChange={(e) => setFeedbackText(e.target.value)}
-                placeholder="Tell us more... (Optional)"
+                placeholder={translations.feedbackPlaceholder}
                 className="w-full bg-gray-700/50 border border-gray-600 rounded-lg p-4 text-white placeholder-gray-400 focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 outline-none transition"
                 rows={3}
                 aria-label="Feedback input"
@@ -119,19 +122,19 @@ const SummaryScreen: React.FC<SummaryScreenProps> = ({ summary, onRestart, conve
                 disabled={starRating === 0}
                 className="mt-4 w-full bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-full text-lg transition-all duration-300"
               >
-                Submit Feedback
+                {translations.submitFeedback}
               </button>
             </div>
           ) : (
             <div className="text-center bg-green-900/50 border border-green-700 rounded-lg p-6 animate-fade-in">
               <ThumbsUpIcon className="w-12 h-12 text-green-400 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold text-green-300">Thank you for your feedback!</h2>
+              <h2 className="text-2xl font-bold text-green-300">{translations.feedbackThanksTitle}</h2>
               <div className="flex justify-center gap-1 mt-2">
                 {[...Array(5)].map((_, i) => (
                   <StarIcon key={i} className={`w-6 h-6 ${i < starRating ? 'text-yellow-400' : 'text-gray-600'}`} />
                 ))}
               </div>
-              <p className="text-gray-300 mt-2">We appreciate you helping us make this tool better.</p>
+              <p className="text-gray-300 mt-2">{translations.feedbackThanksDescription}</p>
             </div>
           )}
         </div>
@@ -141,13 +144,13 @@ const SummaryScreen: React.FC<SummaryScreenProps> = ({ summary, onRestart, conve
               onClick={() => setIsTranscriptOpen(true)}
               className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-8 rounded-full text-lg transition-all duration-300"
           >
-              View Transcript
+              {translations.viewTranscript}
           </button>
           <button
               onClick={onRestart}
               className="bg-cyan-400 hover:bg-cyan-500 text-gray-900 font-bold py-3 px-8 rounded-full text-lg transition-all duration-300 transform hover:scale-105 shadow-lg shadow-cyan-500/20"
           >
-              Start New Session
+              {translations.startNewSession}
           </button>
         </div>
 

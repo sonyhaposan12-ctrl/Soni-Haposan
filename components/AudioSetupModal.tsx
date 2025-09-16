@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import RealtimeMonitor from './RealtimeMonitor';
 import HeadsetIcon from './icons/HeadsetIcon';
+import { T } from '../translations';
 
 interface AudioSetupModalProps {
   onConfirm: () => void;
   onCancel: () => void;
   audioStream: MediaStream | null;
+  translations: typeof T['en'];
 }
 
-const AudioSetupModal: React.FC<AudioSetupModalProps> = ({ onConfirm, onCancel, audioStream }) => {
+const AudioSetupModal: React.FC<AudioSetupModalProps> = ({ onConfirm, onCancel, audioStream, translations }) => {
     const [testSoundPlayed, setTestSoundPlayed] = useState(false);
 
     const handlePlayTestSound = () => {
@@ -61,7 +63,8 @@ const AudioSetupModal: React.FC<AudioSetupModalProps> = ({ onConfirm, onCancel, 
                 <div className="bg-gray-900/50 rounded-lg p-4 mb-6">
                     <p className="text-gray-300 font-semibold mb-2">Step 2: Check the monitor below</p>
                     <p className="text-gray-400 text-sm mb-4">When the sound plays, these bars should move. If they don't, check your speaker volume.</p>
-                    <RealtimeMonitor audioStream={audioStream} showTranscript={false} />
+                    {/* Fix: Pass the 'translations' prop to RealtimeMonitor to satisfy its prop requirements. */}
+                    <RealtimeMonitor audioStream={audioStream} showTranscript={false} translations={translations} />
                 </div>
 
                 <div className="flex gap-4">

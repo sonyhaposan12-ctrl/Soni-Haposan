@@ -3,12 +3,14 @@ import StopIcon from './icons/StopIcon';
 import SparklesIcon from './icons/SparklesIcon';
 import MicIcon from './icons/MicIcon';
 import { AppMode } from '../types';
+import { T } from '../translations';
 
 interface ControlsProps {
     mode: AppMode;
     isProcessing: boolean;
     isListening: boolean;
     onEndSession: () => void;
+    translations: typeof T['en'];
     // Copilot props
     onGenerate?: () => void;
     onGenerateExample?: () => void;
@@ -27,7 +29,8 @@ const Controls: React.FC<ControlsProps> = ({
     mode, 
     isProcessing, 
     isListening,
-    onEndSession, 
+    onEndSession,
+    translations, 
     onGenerate,
     onGenerateExample, 
     finalTranscript,
@@ -42,20 +45,20 @@ const Controls: React.FC<ControlsProps> = ({
     
     const renderCopilotControls = () => {
         const fullTranscript = [finalTranscript, interimTranscript].filter(Boolean).join(' ');
-        let statusText = 'Listening for interviewer...';
+        let statusText = translations.copilotStatusListening;
         if (isProcessing) {
-            statusText = 'AI is generating suggestions...';
+            statusText = translations.copilotStatusGenerating;
         } else if (isOnCooldown) {
-            statusText = `Rate limited. Please wait ${cooldownSeconds}s.`;
+            statusText = translations.copilotStatusCooldown(cooldownSeconds || 0);
         } else if (isListening && fullTranscript) {
             statusText = `"${fullTranscript}"`;
         } else if (isListening) {
-            statusText = 'Listening...';
+            statusText = translations.listening;
         }
         
         const isButtonDisabled = isProcessing || isOnCooldown;
-        const talkingPointsText = isOnCooldown ? `On Cooldown (${cooldownSeconds}s)` : isProcessing ? 'Thinking...' : 'Talking Points';
-        const exampleAnswerText = isOnCooldown ? `On Cooldown (${cooldownSeconds}s)` : isProcessing ? 'Drafting...' : 'Example Answer';
+        const talkingPointsText = isOnCooldown ? translations.onCooldown(cooldownSeconds || 0) : isProcessing ? translations.thinking : translations.talkingPoints;
+        const exampleAnswerText = isOnCooldown ? translations.onCooldown(cooldownSeconds || 0) : isProcessing ? translations.drafting : translations.exampleAnswer;
 
         return (
             <>
@@ -94,7 +97,7 @@ const Controls: React.FC<ControlsProps> = ({
                  <div className="text-gray-400 text-sm italic">
                     {isListening ?
                         <div>
-                            <span>Recording answer...</span>
+                            <span>{translations.practiceStatusRecording}</span>
                             <p className="text-gray-200 mt-0.5">
                                 {finalTranscript}
                                 {interimTranscript && (
@@ -105,8 +108,8 @@ const Controls: React.FC<ControlsProps> = ({
                             </p>
                         </div>
                         : practiceState === 'feedback'
-                            ? <p>Review your feedback above.</p>
-                            : <p>Ready for the next question.</p>
+                            ? <p>{translations.practiceStatusReview}</p>
+                            : <p>{translations.practiceStatusReady}</p>
                     }
                 </div>
             </div>
@@ -117,7 +120,7 @@ const Controls: React.FC<ControlsProps> = ({
                     className="flex items-center space-x-2 bg-green-500 hover:bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-full transition-colors duration-300"
                 >
                     <MicIcon className="w-5 h-5" />
-                    <span>Answer Question</span>
+                    <span>{translations.answerQuestion}</span>
                 </button>
             )}
              {practiceState === 'answering' && (
@@ -127,7 +130,7 @@ const Controls: React.FC<ControlsProps> = ({
                     className="flex items-center space-x-2 bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-600 text-white font-bold py-2 px-4 rounded-full transition-colors duration-300"
                 >
                     <StopIcon className="w-5 h-5" />
-                    <span>{isProcessing ? 'Submitting...' : 'Submit Answer'}</span>
+                    <span>{isProcessing ? translations.submitting : translations.submitAnswer}</span>
                 </button>
             )}
              {practiceState === 'feedback' && (
@@ -137,7 +140,7 @@ const Controls: React.FC<ControlsProps> = ({
                     className="flex items-center space-x-2 bg-cyan-500 hover:bg-cyan-600 disabled:bg-gray-600 text-white font-bold py-2 px-4 rounded-full transition-colors duration-300"
                 >
                     <SparklesIcon className="w-5 h-5" />
-                    <span>{isProcessing ? 'Getting Question...' : 'Next Question'}</span>
+                    <span>{isProcessing ? translations.gettingQuestion : translations.nextQuestion}</span>
                 </button>
             )}
         </>
@@ -153,7 +156,7 @@ const Controls: React.FC<ControlsProps> = ({
                     className="flex items-center space-x-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-full transition-colors duration-300"
                 >
                     <StopIcon className="w-5 h-5" />
-                    <span>End & Summarize</span>
+                    <span>{translations.endSession}</span>
                 </button>
             </div>
         </div>

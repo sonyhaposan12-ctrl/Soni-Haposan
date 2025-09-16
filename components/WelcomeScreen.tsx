@@ -8,6 +8,8 @@ import SpinnerIcon from './icons/SpinnerIcon';
 import CompanyBriefingModal from './CompanyBriefingModal';
 import { AppMode, CompanyBriefing } from '../types';
 import { getCompanyBriefing } from '../services/geminiService';
+import { Language } from '../App';
+import { T } from '../translations';
 
 
 // Extend the global Window interface for TypeScript to recognize pdfjsLib
@@ -22,15 +24,10 @@ interface WelcomeScreenProps {
   onShowHistory: () => void;
   onOpenSettings: () => void;
   hasHistory: boolean;
+  translations: typeof T['en'];
 }
 
-const setupTasks = [
-    { id: 'task1', text: 'Have your meeting (Meet, Zoom, Teams) open in a separate browser tab' },
-    { id: 'task2', text: 'For Live Assistance, you must share your meeting tab WITH AUDIO' },
-    { id: 'task3', text: 'For Practice mode, ensure your microphone is working' },
-];
-
-const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, onOpenSettings, hasHistory }) => {
+const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, onOpenSettings, hasHistory, translations }) => {
     const [jobTitle, setJobTitle] = useState('');
     const [companyName, setCompanyName] = useState('');
     const [cvContent, setCvContent] = useState('');
@@ -51,6 +48,12 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
     const MAX_COMPANY_NAME_LENGTH = 100;
     const MAX_CV_SIZE_MB = 5;
     const MAX_CV_SIZE_BYTES = MAX_CV_SIZE_MB * 1024 * 1024;
+    
+    const setupTasks = [
+        { id: 'task1', text: translations.checklist1 },
+        { id: 'task2', text: translations.checklist2 },
+        { id: 'task3', text: translations.checklist3 },
+    ];
 
     useEffect(() => {
         // Load saved CV from localStorage on initial render
@@ -94,7 +97,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
         handleClearCv(false); 
 
         if (file.size > MAX_CV_SIZE_BYTES) {
-            setCvError(`File is too large. Please upload a CV smaller than ${MAX_CV_SIZE_MB}MB.`);
+            setCvError(translations.errorCvSize(MAX_CV_SIZE_MB));
             if (fileInputRef.current) fileInputRef.current.value = '';
             return;
         }
@@ -116,18 +119,18 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
         } else if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
             const pdfjsLib = window.pdfjsLib;
             if (!pdfjsLib) {
-                setCvError('PDF reader failed to load. You can still use .txt files or refresh the page.');
+                setCvError(translations.errorPdfReader);
                 return;
             }
 
             setIsParsingCv(true);
-            setCvFileName(`Parsing ${file.name}...`);
+            setCvFileName(translations.parsingCv(file.name));
             
             const reader = new FileReader();
             reader.onload = async (e) => {
                 const arrayBuffer = e.target?.result as ArrayBuffer;
                 if (!arrayBuffer) {
-                    setCvError('Could not read the PDF file.');
+                    setCvError(translations.errorPdfRead);
                     setIsParsingCv(false);
                     return;
                 }
@@ -143,11 +146,11 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
                     saveCv(file.name, fullText.trim());
                 } catch (error: any) {
                     console.error('Error parsing PDF:', error);
-                    let message = 'Failed to parse the PDF.';
+                    let message = translations.errorPdfParse;
                     if (error.name === 'PasswordException') {
-                        message = 'This PDF is password-protected and cannot be read.';
+                        message = translations.errorPdfPassword;
                     } else if (error.name === 'InvalidPDFException') {
-                        message = 'This file does not appear to be a valid PDF.';
+                        message = translations.errorPdfInvalid;
                     }
                     setCvError(message);
                     setCvFileName('');
@@ -157,7 +160,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
             };
             reader.readAsArrayBuffer(file);
         } else {
-            setCvError('Unsupported file type. Please upload a .txt or .pdf file.');
+            setCvError(translations.errorCvType);
         }
     };
     
@@ -188,15 +191,15 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
         const trimmedCompanyName = companyName.trim();
 
         if (!trimmedJobTitle) {
-            setJobTitleError("Please enter the position you're applying for.");
+            setJobTitleError(translations.errorJobTitleEmpty);
             isValid = false;
         } else if (trimmedJobTitle.length > MAX_JOB_TITLE_LENGTH) {
-            setJobTitleError(`Job title must be ${MAX_JOB_TITLE_LENGTH} characters or less.`);
+            setJobTitleError(translations.errorJobTitleLength(MAX_JOB_TITLE_LENGTH));
             isValid = false;
         }
 
         if (trimmedCompanyName.length > MAX_COMPANY_NAME_LENGTH) {
-            setCompanyNameError(`Company name must be ${MAX_COMPANY_NAME_LENGTH} characters or less.`);
+            setCompanyNameError(translations.errorCompanyNameLength(MAX_COMPANY_NAME_LENGTH));
             isValid = false;
         }
 
@@ -214,9 +217,10 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
         setBriefingData(null);
         setIsBriefingOpen(true);
         
-        const result = await getCompanyBriefing(trimmedCompanyName);
+        const currentLang = (localStorage.getItem('language') as Language) || 'en';
+        const result = await getCompanyBriefing(trimmedCompanyName, currentLang);
 
-        if (result.briefing.toLowerCase().startsWith('error:')) {
+        if (result.briefing.toLowerCase().startsWith('error:') || result.briefing.toLowerCase().startsWith('kesalahan:')) {
             setBriefingError(result.briefing);
         } else {
             setBriefingData(result);
@@ -226,16 +230,17 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
     }
 
     const uploadLabelText = isParsingCv 
-        ? 'Processing PDF...' 
+        ? translations.processingPdf
         : cvFileName 
-        ? `${cvFileName} (Loaded)` 
-        : 'Upload CV (Optional, .txt or .pdf)';
+        ? `${cvFileName} (${translations.loaded})` 
+        : translations.uploadCv;
     
     const isStartDisabled = !jobTitle.trim() || isParsingCv;
 
     return (
         <>
         <CompanyBriefingModal 
+            translations={translations}
             isOpen={isBriefingOpen}
             onClose={() => setIsBriefingOpen(false)}
             companyName={companyName}
@@ -247,30 +252,30 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
              <button
                 onClick={onOpenSettings}
                 className="absolute top-4 right-4 p-3 rounded-full text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors"
-                aria-label="Open settings"
+                aria-label={translations.openSettings}
             >
                 <CogIcon className="w-6 h-6" />
             </button>
             <div className="mb-6">
                 <LogoIcon className="w-28 h-28" />
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold mb-3 tracking-tight">AI Interview Copilot</h1>
+            <h1 className="text-4xl md:text-5xl font-bold mb-3 tracking-tight">{translations.welcomeTitle}</h1>
             <p className="max-w-2xl text-lg text-gray-300 mb-8">
-                Your AI-powered assistant for job interviews. Choose between live assistance or a practice session to get started.
+                {translations.welcomeDescription}
             </p>
 
             <div className="w-full max-w-md space-y-8 animate-fade-in">
                 {/* Input Fields Section */}
                 <div className="space-y-4">
                     <div>
-                        <label htmlFor="job-title" className="sr-only">Position you're applying for</label>
+                        <label htmlFor="job-title" className="sr-only">{translations.positionLabel}</label>
                         <input 
                             type="text"
                             id="job-title"
                             value={jobTitle}
                             onChange={handleJobTitleChange}
                             maxLength={MAX_JOB_TITLE_LENGTH}
-                            placeholder="Position you're applying for (e.g., Senior Frontend Engineer)"
+                            placeholder={translations.positionPlaceholder}
                             className={`w-full bg-gray-700/50 border text-white placeholder-gray-400 text-center text-lg rounded-full py-3 px-6 focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 outline-none transition ${jobTitleError ? 'border-red-500 ring-red-500/50' : 'border-gray-600'}`}
                             aria-invalid={!!jobTitleError}
                             aria-describedby="job-title-error"
@@ -278,14 +283,14 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
                         {jobTitleError && <p id="job-title-error" className="text-red-400 text-sm mt-2">{jobTitleError}</p>}
                     </div>
                     <div className="relative">
-                        <label htmlFor="company-name" className="sr-only">Company Name (Optional)</label>
+                        <label htmlFor="company-name" className="sr-only">{translations.companyLabel}</label>
                         <input
                             type="text"
                             id="company-name"
                             value={companyName}
                             onChange={handleCompanyNameChange}
                             maxLength={MAX_COMPANY_NAME_LENGTH}
-                            placeholder="Company Name (Optional)"
+                            placeholder={translations.companyPlaceholder}
                             className={`w-full bg-gray-700/50 border text-white placeholder-gray-400 text-center text-lg rounded-full py-3 px-14 focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 outline-none transition ${companyNameError ? 'border-red-500 ring-red-500/50' : 'border-gray-600'}`}
                             aria-invalid={!!companyNameError}
                             aria-describedby="company-name-error"
@@ -294,8 +299,8 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
                             onClick={handleGenerateBriefing}
                             disabled={!companyName.trim() || isGeneratingBriefing}
                             className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full text-gray-400 hover:text-cyan-300 hover:bg-gray-600/50 disabled:cursor-not-allowed disabled:text-gray-600 transition-colors"
-                            aria-label="Generate company briefing"
-                            title="Generate company briefing"
+                            aria-label={translations.generateBriefing}
+                            title={translations.generateBriefing}
                         >
                             {isGeneratingBriefing ? <SpinnerIcon className="w-5 h-5" /> : <LightbulbIcon className="w-5 h-5" />}
                         </button>
@@ -310,7 +315,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
                             <button 
                                 onClick={() => handleClearCv()} 
                                 className="absolute right-2 top-1/2 -translate-y-1/2 mt-1 bg-gray-600 hover:bg-red-500 text-white rounded-full p-1.5 transition-colors"
-                                aria-label="Clear saved CV"
+                                aria-label={translations.clearCv}
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -333,7 +338,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
 
                 {/* Checklist Section */}
                 <div className="text-left">
-                    <h2 className="text-lg font-semibold text-gray-200 mb-4 text-center">Pre-session Checklist</h2>
+                    <h2 className="text-lg font-semibold text-gray-200 mb-4 text-center">{translations.preSessionChecklist}</h2>
                      <div className="rounded-lg bg-gray-900/50 border border-gray-700 overflow-hidden">
                         <div className="divide-y divide-gray-700/50">
                             {setupTasks.map(task => (
@@ -361,14 +366,14 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
                     disabled={isStartDisabled}
                     className="bg-cyan-400 hover:bg-cyan-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-gray-900 font-bold py-3 px-8 rounded-full text-lg transition-all duration-300 transform hover:scale-105 shadow-lg shadow-cyan-500/20"
                 >
-                    Start Live Assistance
+                    {translations.startLiveAssistance}
                 </button>
                  <button
                     onClick={() => validateAndStart('practice')}
                     disabled={isStartDisabled}
                     className="bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-8 rounded-full text-lg transition-all duration-300 transform hover:scale-105 shadow-lg shadow-indigo-500/20"
                 >
-                    Start Practice Session
+                    {translations.startPracticeSession}
                 </button>
             </div>
             
@@ -378,13 +383,13 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
                     className="mt-6 flex items-center gap-2 text-gray-400 hover:text-white transition-colors animate-fade-in"
                  >
                     <ClockIcon className="w-5 h-5" />
-                    <span>View Session History</span>
+                    <span>{translations.viewHistory}</span>
                 </button>
             )}
 
             <div className="mt-auto pt-4 text-center">
                 <p className="text-sm text-gray-400">
-                    Make sure to allow microphone access when prompted.
+                    {translations.micPermissionPrompt}
                 </p>
                 <p className="text-xs text-gray-500 mt-2">
                     &copy; {new Date().getFullYear()} PT Josera Global IT Solusindo. All rights reserved.

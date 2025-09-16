@@ -3,6 +3,7 @@ import { ConversationItem, AppMode, Role } from '../types';
 import ClipboardIcon from './icons/ClipboardIcon';
 import DownloadIcon from './icons/DownloadIcon';
 import DocumentTextIcon from './icons/DocumentTextIcon';
+import { T } from '../translations';
 
 interface TranscriptModalProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ interface TranscriptModalProps {
   companyName: string;
   appMode: AppMode;
   sessionDate: string;
+  translations: typeof T['en'];
 }
 
 const stripMarkdown = (text: string = ''): string => {
@@ -23,46 +25,46 @@ const stripMarkdown = (text: string = ''): string => {
         .replace(/`([^`]+)`/g, '$1');      // Inline code
 };
 
-const TranscriptModal: React.FC<TranscriptModalProps> = ({ isOpen, onClose, conversation, jobTitle, companyName, appMode, sessionDate }) => {
-    const [copyButtonText, setCopyButtonText] = useState('Copy');
+const TranscriptModal: React.FC<TranscriptModalProps> = ({ isOpen, onClose, conversation, jobTitle, companyName, appMode, sessionDate, translations }) => {
+    const [copyButtonText, setCopyButtonText] = useState(translations.copy);
 
     const transcriptText = useMemo(() => {
-        let transcript = `Interview Transcript\n`;
+        let transcript = `${translations.interviewTranscript}\n`;
         transcript += `====================\n`;
-        transcript += `Job Title: ${jobTitle}\n`;
-        if (companyName) transcript += `Company: ${companyName}\n`;
-        transcript += `Mode: ${appMode === 'practice' ? 'Practice' : 'Copilot'}\n`;
-        transcript += `Date: ${sessionDate}\n`;
+        transcript += `${translations.jobTitle}: ${jobTitle}\n`;
+        if (companyName) transcript += `${translations.company}: ${companyName}\n`;
+        transcript += `${translations.mode}: ${appMode === 'practice' ? translations.practice : translations.copilot}\n`;
+        transcript += `${translations.date}: ${sessionDate}\n`;
         transcript += `====================\n\n`;
     
         conversation.forEach(item => {
             if (appMode === 'practice') {
                 if (item.role === Role.MODEL) {
                     if (item.feedback) {
-                        transcript += `AI Feedback (Rating: ${item.rating || 'N/A'}):\n${stripMarkdown(item.feedback)}\n\n`;
+                        transcript += `${translations.aiFeedback} (${translations.rating}: ${item.rating || 'N/A'}):\n${stripMarkdown(item.feedback)}\n\n`;
                     }
-                    transcript += `AI Interviewer:\n${stripMarkdown(item.text)}\n\n`;
+                    transcript += `${translations.roleAiInterviewer}:\n${stripMarkdown(item.text)}\n\n`;
                 } else {
-                    transcript += `You:\n${stripMarkdown(item.text)}\n\n`;
+                    transcript += `${translations.roleYou}:\n${stripMarkdown(item.text)}\n\n`;
                 }
             } else { // copilot mode
                 if (item.role === Role.MODEL) {
-                    transcript += `Interviewer Question:\n${stripMarkdown(item.text)}\n\n`;
+                    transcript += `${translations.roleInterviewerQuestion}:\n${stripMarkdown(item.text)}\n\n`;
                 } else {
-                    const label = item.type === 'exampleAnswer' ? 'AI Example Answer:' : 'AI Talking Points:';
-                    transcript += `${label}\n${stripMarkdown(item.text)}\n\n`;
+                    const label = item.type === 'exampleAnswer' ? translations.roleAiExample : translations.roleAiSuggestion;
+                    transcript += `${label}:\n${stripMarkdown(item.text)}\n\n`;
                 }
             }
         });
         return transcript.trim();
-    }, [conversation, jobTitle, companyName, appMode, sessionDate]);
+    }, [conversation, jobTitle, companyName, appMode, sessionDate, translations]);
 
     const handleCopy = useCallback(() => {
         navigator.clipboard.writeText(transcriptText).then(() => {
-            setCopyButtonText('Copied!');
-            setTimeout(() => setCopyButtonText('Copy'), 2000);
+            setCopyButtonText(translations.copied);
+            setTimeout(() => setCopyButtonText(translations.copy), 2000);
         });
-    }, [transcriptText]);
+    }, [transcriptText, translations]);
 
     const handleDownload = useCallback(() => {
         const blob = new Blob([transcriptText], { type: 'text/plain' });
@@ -94,7 +96,7 @@ const TranscriptModal: React.FC<TranscriptModalProps> = ({ isOpen, onClose, conv
                 <header className="p-4 border-b border-gray-700 flex justify-between items-center flex-shrink-0">
                     <h2 id="transcript-title" className="text-xl font-bold flex items-center gap-2">
                         <DocumentTextIcon className="w-6 h-6 text-cyan-400"/>
-                        Interview Transcript
+                        {translations.interviewTranscript}
                     </h2>
                     <div className="flex items-center gap-2">
                          <button onClick={handleCopy} className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-full transition-colors text-sm">
@@ -103,9 +105,9 @@ const TranscriptModal: React.FC<TranscriptModalProps> = ({ isOpen, onClose, conv
                         </button>
                         <button onClick={handleDownload} className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-full transition-colors text-sm">
                             <DownloadIcon className="w-4 h-4" />
-                            <span>Download .txt</span>
+                            <span>{translations.download}</span>
                         </button>
-                        <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-700" aria-label="Close transcript">
+                        <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-700" aria-label={translations.closeTranscript}>
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                             </svg>

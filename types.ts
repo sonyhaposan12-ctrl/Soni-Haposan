@@ -10,7 +10,7 @@ export interface ConversationItem {
   text: string;
   type?: 'talkingPoints' | 'exampleAnswer';
   feedback?: string;
-  rating?: 'Needs Improvement' | 'Good' | 'Excellent';
+  rating?: 'Needs Improvement' | 'Good' | 'Excellent' | 'Perlu Peningkatan' | 'Baik' | 'Luar Biasa';
 }
 
 export type AppMode = 'copilot' | 'practice';
