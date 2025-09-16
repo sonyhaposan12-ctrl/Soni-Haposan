@@ -34,3 +34,13 @@ export interface InProgressSession {
   mode: AppMode;
   conversation: ConversationItem[];
 }
+
+export interface GroundingSource {
+  uri: string;
+  title: string;
+}
+
+export interface CompanyBriefing {
+  briefing: string;
+  sources: GroundingSource[];
+}

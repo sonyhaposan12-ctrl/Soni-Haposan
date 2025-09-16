@@ -1,5 +1,5 @@
 import { GoogleGenAI, Chat, GenerateContentResponse, Type, Content } from "@google/genai";
-import { ConversationItem, Role, AppMode } from "../types";
+import { ConversationItem, Role, AppMode, CompanyBriefing, GroundingSource } from "../types";
 
 if (!process.env.API_KEY) {
     throw new Error("API_KEY environment variable is not set");
@@ -235,6 +235,61 @@ export const getPracticeResponse = async (chat: Chat, latestAnswer?: string): Pr
         };
     }
 };
+
+// --- Company Briefing ---
+export const getCompanyBriefing = async (companyName: string): Promise<CompanyBriefing> => {
+    const prompt = `You are an expert career research analyst. You are preparing a concise briefing for a candidate interviewing at "${companyName}". Your goal is to provide the most critical information to help them succeed.
+
+Based on up-to-date information from the web, generate a report in markdown format.
+
+The report MUST include the following sections with the exact headings as specified:
+### Company Overview
+A brief, one-paragraph summary of what the company does.
+
+### Mission & Values
+The company's official or inferred mission statement and core values, presented as a short list.
+
+### Recent News & Developments
+2-3 bullet points on significant recent events, product launches, or news (within the last 6-12 months).
+
+### Potential Interview Questions
+3 behavioral or company-fit questions an interviewer at "${companyName}" might ask, based on their values and recent activities. For each question, provide a brief (1-2 sentence) rationale in italics for why they might ask it.`;
+    
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                tools: [{googleSearch: {}}],
+            },
+        });
+
+        const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+        let sources: GroundingSource[] = [];
+        if (groundingChunks) {
+            const mappedSources = groundingChunks
+                .map(chunk => ({
+                    uri: chunk.web?.uri,
+                    title: chunk.web?.title,
+                }))
+                .filter(source => source.uri && source.title) as GroundingSource[];
+            // De-duplicate sources
+            sources = Array.from(new Map(mappedSources.map(item => [item.uri, item])).values());
+        }
+
+        return {
+            briefing: response.text,
+            sources: sources
+        };
+    } catch(error) {
+        const errorMessage = parseApiError(error);
+        return {
+            briefing: `Error: Could not generate a company briefing.\n\nDetails: ${errorMessage}`,
+            sources: [],
+        }
+    }
+};
+
 
 // --- Summary ---
 

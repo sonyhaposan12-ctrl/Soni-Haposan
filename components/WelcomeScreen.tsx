@@ -3,7 +3,12 @@ import UploadIcon from './icons/UploadIcon';
 import HeadsetIcon from './icons/HeadsetIcon';
 import ClockIcon from './icons/ClockIcon';
 import CogIcon from './icons/CogIcon';
-import { AppMode } from '../types';
+import LightbulbIcon from './icons/LightbulbIcon';
+import SpinnerIcon from './icons/SpinnerIcon';
+import CompanyBriefingModal from './CompanyBriefingModal';
+import { AppMode, CompanyBriefing } from '../types';
+import { getCompanyBriefing } from '../services/geminiService';
+
 
 // Extend the global Window interface for TypeScript to recognize pdfjsLib
 declare global {
@@ -35,6 +40,10 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
     const [companyNameError, setCompanyNameError] = useState('');
     const [cvError, setCvError] = useState('');
     const [completedTasks, setCompletedTasks] = useState<Set<string>>(new Set());
+    const [isBriefingOpen, setIsBriefingOpen] = useState(false);
+    const [isGeneratingBriefing, setIsGeneratingBriefing] = useState(false);
+    const [briefingData, setBriefingData] = useState<CompanyBriefing | null>(null);
+    const [briefingError, setBriefingError] = useState<string | null>(null);
     
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -195,6 +204,26 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
 
         if (isValid) onStart(mode, trimmedJobTitle, trimmedCompanyName, cvContent);
     };
+    
+    const handleGenerateBriefing = async () => {
+        const trimmedCompanyName = companyName.trim();
+        if (!trimmedCompanyName) return;
+        
+        setIsGeneratingBriefing(true);
+        setBriefingError(null);
+        setBriefingData(null);
+        setIsBriefingOpen(true);
+        
+        const result = await getCompanyBriefing(trimmedCompanyName);
+
+        if (result.briefing.toLowerCase().startsWith('error:')) {
+            setBriefingError(result.briefing);
+        } else {
+            setBriefingData(result);
+        }
+        
+        setIsGeneratingBriefing(false);
+    }
 
     const uploadLabelText = isParsingCv 
         ? 'Processing PDF...' 
@@ -205,6 +234,15 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
     const isStartDisabled = !jobTitle.trim() || isParsingCv;
 
     return (
+        <>
+        <CompanyBriefingModal 
+            isOpen={isBriefingOpen}
+            onClose={() => setIsBriefingOpen(false)}
+            companyName={companyName}
+            briefingData={briefingData}
+            isLoading={isGeneratingBriefing}
+            error={briefingError}
+        />
         <div className="flex flex-col items-center justify-center h-full text-center text-white p-8 overflow-y-auto relative">
              <button
                 onClick={onOpenSettings}
@@ -237,7 +275,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
                     />
                     {jobTitleError && <p id="job-title-error" className="text-red-400 text-sm mt-2">{jobTitleError}</p>}
                 </div>
-                <div>
+                <div className="relative">
                     <label htmlFor="company-name" className="sr-only">Company Name (Optional)</label>
                     <input
                         type="text"
@@ -246,10 +284,19 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
                         onChange={handleCompanyNameChange}
                         maxLength={MAX_COMPANY_NAME_LENGTH}
                         placeholder="Company Name (Optional)"
-                        className={`w-full bg-gray-700/50 border text-white placeholder-gray-400 text-center text-lg rounded-full py-3 px-6 focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 outline-none transition ${companyNameError ? 'border-red-500 ring-red-500/50' : 'border-gray-600'}`}
+                        className={`w-full bg-gray-700/50 border text-white placeholder-gray-400 text-center text-lg rounded-full py-3 px-14 focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 outline-none transition ${companyNameError ? 'border-red-500 ring-red-500/50' : 'border-gray-600'}`}
                         aria-invalid={!!companyNameError}
                         aria-describedby="company-name-error"
                     />
+                     <button
+                        onClick={handleGenerateBriefing}
+                        disabled={!companyName.trim() || isGeneratingBriefing}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full text-gray-400 hover:text-cyan-300 hover:bg-gray-600/50 disabled:cursor-not-allowed disabled:text-gray-600 transition-colors"
+                        aria-label="Generate company briefing"
+                        title="Generate company briefing"
+                    >
+                        {isGeneratingBriefing ? <SpinnerIcon className="w-5 h-5" /> : <LightbulbIcon className="w-5 h-5" />}
+                    </button>
                     {companyNameError && <p id="company-name-error" className="text-red-400 text-sm mt-2">{companyNameError}</p>}
                 </div>
                 <div className="pt-2 relative">
@@ -338,6 +385,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, onShowHistory, o
                 </p>
             </div>
         </div>
+        </>
     );
 };
 
