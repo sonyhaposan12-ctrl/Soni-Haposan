@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 const StopIcon: React.FC<{ className?: string }> = ({ className }) => (

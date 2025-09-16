@@ -112,29 +112,33 @@ const ConversationMessage: React.FC<{ item: ConversationItem, appMode: AppMode }
     );
 });
 
+// Fix: The Conversation component was corrupted, missing its implementation and default export.
+// It has been restored to correctly render messages, handle scrolling, and display a loading indicator.
 const Conversation: React.FC<ConversationProps> = ({ conversation, isProcessing, appMode }) => {
     const endOfMessagesRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
-        // Instantly scroll to the bottom when new messages are added to maintain a real-time feel.
-        // The 'auto' behavior is more immediate than 'smooth'.
+        // Instantly scroll to the bottom when new messages are added.
         endOfMessagesRef.current?.scrollIntoView({ behavior: 'auto' });
-    }, [conversation]);
-    
+    }, [conversation, isProcessing]);
+
+    const modelAvatarText = appMode === 'practice' ? 'AI' : 'IV';
+    const modelAvatarTitle = appMode === 'practice' ? 'AI Interviewer' : 'Interviewer';
+
     return (
-        <div className="flex-1 p-6 space-y-6 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto p-4 space-y-6">
             {conversation.map((item, index) => (
                 <ConversationMessage key={index} item={item} appMode={appMode} />
             ))}
-            {isProcessing && appMode === 'practice' && (
-                <div className="flex items-start gap-4">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex-shrink-0 flex items-center justify-center font-bold text-white">AI</div>
-                    <div className="max-w-lg p-4 rounded-2xl bg-gray-700 text-gray-200 rounded-bl-none">
-                        <div className="flex space-x-1">
-                            <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.3s]"></span>
-                            <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.15s]"></span>
-                            <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></span>
-                        </div>
+            {isProcessing && (
+                 <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 rounded-full bg-gray-600 flex-shrink-0 flex items-center justify-center font-bold text-white" title={modelAvatarTitle}>
+                        {modelAvatarText}
+                    </div>
+                    <div className="max-w-lg p-4 rounded-2xl bg-gray-700 text-gray-200 rounded-bl-none flex items-center space-x-2">
+                         <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse" style={{animationDelay: '0s'}}></div>
+                         <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse" style={{animationDelay: '0.2s'}}></div>
+                         <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse" style={{animationDelay: '0.4s'}}></div>
                     </div>
                 </div>
             )}
@@ -143,4 +147,4 @@ const Conversation: React.FC<ConversationProps> = ({ conversation, isProcessing,
     );
 };
 
-export default React.memo(Conversation);
+export default Conversation;

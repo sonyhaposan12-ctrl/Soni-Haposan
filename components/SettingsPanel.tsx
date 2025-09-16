@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import SpeakerOnIcon from './icons/SpeakerOnIcon';
 import SpeakerOffIcon from './icons/SpeakerOffIcon';
+import PlayIcon from './icons/PlayIcon';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -62,6 +63,22 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
       onTtsToggle(!isTtsEnabled);
   }
 
+  const handlePreviewVoice = () => {
+    if (!ttsVoiceURI || !window.speechSynthesis) return;
+
+    window.speechSynthesis.cancel(); // Stop any current speech
+
+    const sampleText = "Hello, this is a preview of the selected voice.";
+    const utterance = new SpeechSynthesisUtterance(sampleText);
+    const selectedVoice = voices.find(voice => voice.voiceURI === ttsVoiceURI);
+
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+
   if (!isOpen) return null;
 
   return (
@@ -109,23 +126,34 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
             <label htmlFor="tts-voice" className="block text-sm font-medium text-gray-300 mb-2">
               AI Voice (Text-to-Speech)
             </label>
-            <select
-              id="tts-voice"
-              value={ttsVoiceURI || ''}
-              onChange={(e) => onTtsVoiceURIChange(e.target.value)}
-              disabled={voices.length === 0}
-              className="w-full bg-gray-700/50 border border-gray-600 rounded-md py-2 px-3 focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 outline-none transition disabled:opacity-50"
-            >
-              {voices.length > 0 ? (
-                voices.map((voice) => (
-                  <option key={voice.voiceURI} value={voice.voiceURI}>
-                    {`${voice.name} (${voice.lang})`}
-                  </option>
-                ))
-              ) : (
-                <option>Loading voices...</option>
-              )}
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                id="tts-voice"
+                value={ttsVoiceURI || ''}
+                onChange={(e) => onTtsVoiceURIChange(e.target.value)}
+                disabled={voices.length === 0}
+                className="flex-grow w-full bg-gray-700/50 border border-gray-600 rounded-md py-2 px-3 focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 outline-none transition disabled:opacity-50"
+              >
+                {voices.length > 0 ? (
+                  voices.map((voice) => (
+                    <option key={voice.voiceURI} value={voice.voiceURI}>
+                      {`${voice.name} (${voice.lang})`}
+                    </option>
+                  ))
+                ) : (
+                  <option>Loading voices...</option>
+                )}
+              </select>
+              <button
+                onClick={handlePreviewVoice}
+                disabled={!ttsVoiceURI || voices.length === 0}
+                className="p-2 rounded-full bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                aria-label="Preview selected voice"
+                title="Preview voice"
+              >
+                <PlayIcon className="w-5 h-5 text-white" />
+              </button>
+            </div>
              <p className="text-xs text-gray-500 mt-1">Choose the voice for AI audio feedback. Options are based on your browser and OS.</p>
           </div>
 

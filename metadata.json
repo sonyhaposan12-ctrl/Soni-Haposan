@@ -2,6 +2,8 @@
   "name": "AI Interview Copilot",
   "description": "Your real-time AI assistant for live job interviews. Get instant, tailored talking points for tough questions on Google Meet, Teams, and Zoom.",
   "requestFramePermissions": [
-    "microphone"
+    "microphone",
+    "camera",
+    "display-capture"
   ]
 }
