@@ -30,7 +30,7 @@ class ErrorBoundary extends Component<Props, State> {
   private handleReset = () => {
     this.props.onReset();
     this.setState({ hasError: false });
-  }
+  };
 
   public render() {
     if (this.state.hasError) {
@@ -38,8 +38,8 @@ class ErrorBoundary extends Component<Props, State> {
       return (
         <ErrorDisplay
           message="Oops! Something went wrong. Dismiss this message to reset the application and start over."
-          // FIX: Used an arrow function for the event handler to ensure `this.handleReset` is called with the correct `this` context.
-          onDismiss={() => this.handleReset()}
+          // FIX: Pass the `handleReset` method directly. Since it's an arrow function, it is already correctly bound.
+          onDismiss={this.handleReset}
         />
       );
     }

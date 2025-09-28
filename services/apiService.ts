@@ -1,5 +1,4 @@
 import { ConversationItem, Role, AppMode, CompanyBriefing, InProgressSession } from "../types";
-// Fix: Import the 'Content' type from the @google/genai package.
 import type { Content } from "@google/genai";
 import { Language } from '../App';
 
