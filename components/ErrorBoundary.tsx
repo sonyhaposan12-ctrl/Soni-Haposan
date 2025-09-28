@@ -25,10 +25,12 @@ class ErrorBoundary extends Component<Props, State> {
     console.error("Uncaught error:", error, errorInfo);
   }
 
+  // FIX: Converted to an arrow function to ensure `this` is correctly bound to the component instance.
+  // This resolves type errors where `this.props` and `this.setState` were not being recognized.
   private handleReset = () => {
     this.props.onReset();
     this.setState({ hasError: false });
-  };
+  }
 
   public render() {
     if (this.state.hasError) {
@@ -36,7 +38,8 @@ class ErrorBoundary extends Component<Props, State> {
       return (
         <ErrorDisplay
           message="Oops! Something went wrong. Dismiss this message to reset the application and start over."
-          onDismiss={this.handleReset}
+          // FIX: Used an arrow function for the event handler to ensure `this.handleReset` is called with the correct `this` context.
+          onDismiss={() => this.handleReset()}
         />
       );
     }

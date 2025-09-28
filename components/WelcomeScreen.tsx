@@ -7,7 +7,8 @@ import LightbulbIcon from './icons/LightbulbIcon';
 import SpinnerIcon from './icons/SpinnerIcon';
 import CompanyBriefingModal from './CompanyBriefingModal';
 import { AppMode, CompanyBriefing } from '../types';
-import { getCompanyBriefing } from '../services/geminiService';
+// Fix: The 'getCompanyBriefing' function is in 'apiService', not the empty 'geminiService'.
+import { getCompanyBriefing } from '../services/apiService';
 import { Language } from '../App';
 import { T } from '../translations';
 

@@ -1,17 +1,16 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ConversationItem, Role, AppMode, AppState, SavedSession, InProgressSession } from './types';
 import { 
-    startCopilotSession, 
     getCopilotResponseStream,
     getInterviewSummary,
-    startPracticeSession,
-    restorePracticeSession,
-    getPracticeResponse
-} from './services/geminiService';
+    getPracticeResponseStream,
+    getPracticeExampleAnswerStream,
+    connectLiveProxy,
+    getCompanyBriefing,
+} from './services/apiService';
 import { getSessions, saveSession, clearSessions, saveInProgressSession, getInProgressSession, clearInProgressSession } from './services/storageService';
 import { T } from './translations';
-import type { PracticeResponse } from './services/geminiService';
-import type { Chat, Content } from '@google/genai';
+import type { Content } from '@google/genai';
 import WelcomeScreen from './components/WelcomeScreen';
 import Conversation from './components/Conversation';
 import Feedback from './components/Feedback';
@@ -22,7 +21,7 @@ import ErrorDisplay from './components/ErrorDisplay';
 import SettingsPanel from './components/SettingsPanel';
 import ErrorBoundary from './components/ErrorBoundary';
 
-// Fix: Add types for the Web Speech API to resolve TypeScript errors.
+// Add types for the Web Speech API to resolve TypeScript errors.
 interface SpeechRecognition extends EventTarget {
     continuous: boolean;
     interimResults: boolean;
@@ -46,6 +45,28 @@ declare global {
 type PracticeState = 'asking' | 'answering' | 'feedback';
 export type Language = 'en' | 'id';
 
+// Helper to encode audio data for the live proxy
+function encode(bytes: Uint8Array): string {
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+// Helper to create audio blob for the live proxy
+function createBlob(data: Float32Array) {
+  const l = data.length;
+  const int16 = new Int16Array(l);
+  for (let i = 0; i < l; i++) {
+    int16[i] = data[i] * 32768;
+  }
+  return {
+    data: encode(new Uint8Array(int16.buffer)),
+    mimeType: 'audio/pcm;rate=16000',
+  };
+}
+
 const parseMarkdownResponse = (markdown: string) => {
     const talkingPointsHeader = '### Talking Points';
     const exampleAnswerHeader = '### Example Answer';
@@ -59,6 +80,29 @@ const parseMarkdownResponse = (markdown: string) => {
         const talkingPoints = markdown.replace(talkingPointsHeader, '').trim();
         return { talkingPoints, exampleAnswer: '' };
     }
+};
+
+const parsePracticeResponse = (markdown: string, lang: Language): { feedback: string; rating: ConversationItem['rating']; question: string } => {
+    const parts = markdown.split('---');
+    if (parts.length === 3) {
+        const ratingText = parts[1].trim();
+        let rating: ConversationItem['rating'] = null;
+        if (['Excellent', 'Luar Biasa'].includes(ratingText)) rating = lang === 'id' ? 'Luar Biasa' : 'Excellent';
+        else if (['Good', 'Baik'].includes(ratingText)) rating = lang === 'id' ? 'Baik' : 'Good';
+        else if (['Needs Improvement', 'Perlu Peningkatan'].includes(ratingText)) rating = lang === 'id' ? 'Perlu Peningkatan' : 'Needs Improvement';
+        
+        return {
+            feedback: parts[0].replace('**Feedback:**', '').trim(),
+            rating: rating,
+            question: parts[2].trim(),
+        };
+    }
+    // This is for the first question which has no feedback/rating
+    return {
+        feedback: '',
+        rating: null,
+        question: markdown.trim(),
+    };
 };
 
 
@@ -94,17 +138,19 @@ const App: React.FC = () => {
 
     // Practice State
     const [practiceState, setPracticeState] = useState<PracticeState>('asking');
+    const [practiceHistory, setPracticeHistory] = useState<Content[]>([]);
     const [isListening, setIsListening] = useState(false);
 
     // Shared State & Refs
     const [transcript, setTranscript] = useState('');
     const [finalTranscript, setFinalTranscript] = useState('');
     const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
-    const chatRef = useRef<Chat | null>(null);
-    const recognitionRef = useRef<SpeechRecognition | null>(null);
+    const recognitionRef = useRef<SpeechRecognition | null>(null); // For practice mode
+    const liveProxyRef = useRef<{ sendAudio: (blob: any) => void; close: () => void; } | null>(null);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const audioProcessorRef = useRef<ScriptProcessorNode | null>(null);
     const isSessionActiveRef = useRef<boolean>(false);
     const cooldownIntervalRef = useRef<number | null>(null);
-    const speechPauseTimerRef = useRef<number | null>(null);
     
     const translations = T[language];
 
@@ -139,7 +185,7 @@ const App: React.FC = () => {
 
     const processCopilotRequest = useCallback(async (type: 'talkingPoints' | 'exampleAnswer') => {
         const question = finalTranscript.trim() || activeQuestion;
-        if (!question || !chatRef.current) return;
+        if (!question) return;
 
         setAppError(null);
         setActiveQuestion(question);
@@ -160,11 +206,10 @@ const App: React.FC = () => {
         
         const isNewQuestion = !conversation.some(item => item.role === Role.MODEL && item.text === question);
         
-        const stream = getCopilotResponseStream(chatRef.current, question, language);
+        const stream = getCopilotResponseStream(jobTitle, companyName, cvContent, question, language);
         let fullResponse = '';
 
         for await (const chunk of stream) {
-            // Error handling for streams: if the chunk is a full error message, stop.
             if (chunk.toLowerCase().startsWith("error:") || chunk.toLowerCase().startsWith("kesalahan:")) {
                 fullResponse = chunk;
                 break;
@@ -188,11 +233,8 @@ const App: React.FC = () => {
                 if (isNewQuestion) {
                     newConversation.push({ role: Role.MODEL, text: question });
                 }
-                // Only add the final, complete response to the conversation history
                 const lastItem = newConversation[newConversation.length - 1];
                 if (lastItem?.role === Role.USER && lastItem?.type === type) {
-                    // This case can happen if user clicks buttons for the same response.
-                    // To avoid duplicates, we can check if the content is the same.
                     if (lastItem.text !== content) {
                          newConversation.push({ role: Role.USER, text: content, type: type });
                     }
@@ -207,31 +249,75 @@ const App: React.FC = () => {
         setIsProcessing(false);
         setTranscript('');
         setFinalTranscript('');
-    }, [finalTranscript, activeQuestion, copilotCache, conversation, language, translations.talkingPoints, translations.exampleAnswer, startCooldown]);
+    }, [finalTranscript, activeQuestion, copilotCache, conversation, language, jobTitle, companyName, cvContent, translations.talkingPoints, translations.exampleAnswer, startCooldown]);
 
+    const setupCopilotLiveTranscription = useCallback((stream: MediaStream) => {
+        const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+        audioContextRef.current = inputAudioContext;
+        
+        const source = inputAudioContext.createMediaStreamSource(stream);
+        const scriptProcessor = inputAudioContext.createScriptProcessor(4096, 1, 1);
+        audioProcessorRef.current = scriptProcessor;
+
+        let currentTurnTranscript = '';
+
+        liveProxyRef.current = connectLiveProxy({
+            onOpen: () => {
+                setIsListening(true);
+            },
+            onMessage: (message) => {
+                if (message.type === 'live_message') {
+                    const liveMessage = message.payload;
+                    if (liveMessage.serverContent?.inputTranscription) {
+                        const { text, isFinal } = liveMessage.serverContent.inputTranscription;
+                        if (isFinal) {
+                            currentTurnTranscript += text;
+                        }
+                        setTranscript(currentTurnTranscript + (isFinal ? '' : text));
+                    }
+                    if (liveMessage.serverContent?.turnComplete) {
+                        if (currentTurnTranscript.trim()) {
+                            setFinalTranscript(currentTurnTranscript.trim());
+                        }
+                        currentTurnTranscript = '';
+                        setTranscript('');
+                    }
+                } else if (message.type === 'live_error') {
+                     console.error('Live session error from backend:', message.payload);
+                    setAppError(translations.errorSpeechRecognition);
+                }
+            },
+            onError: (e: ErrorEvent) => {
+                console.error('Live proxy WebSocket error:', e);
+                setAppError(translations.errorSpeechRecognition);
+            },
+            onClose: () => {
+                setIsListening(false);
+            },
+        });
+
+        scriptProcessor.onaudioprocess = (audioProcessingEvent) => {
+            const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
+            const pcmBlob = createBlob(inputData);
+            liveProxyRef.current?.sendAudio(pcmBlob);
+        };
+
+        source.connect(scriptProcessor);
+        scriptProcessor.connect(inputAudioContext.destination);
+
+    }, [translations.errorSpeechRecognition]);
+    
     useEffect(() => {
         if (appState !== 'session' || appMode !== 'copilot' || !isAutoTriggerEnabled || !finalTranscript.trim()) {
             return;
         }
-    
-        if (speechPauseTimerRef.current) {
-            clearTimeout(speechPauseTimerRef.current);
+        if (!isProcessing) {
+            processCopilotRequest('talkingPoints');
         }
     
-        speechPauseTimerRef.current = window.setTimeout(() => {
-            if (!isProcessing) {
-                 processCopilotRequest('talkingPoints');
-            }
-        }, 1000); // Reduced delay for faster "listening"
-    
-        return () => {
-            if (speechPauseTimerRef.current) {
-                clearTimeout(speechPauseTimerRef.current);
-            }
-        };
     }, [finalTranscript, appState, appMode, isAutoTriggerEnabled, isProcessing, processCopilotRequest]);
 
-    const setupSpeechRecognition = useCallback((mode: AppMode) => {
+    const setupSpeechRecognition = useCallback(() => {
         if (!('webkitSpeechRecognition' in window)) {
             setAppError(translations.errorBrowserSupport);
             return;
@@ -239,65 +325,67 @@ const App: React.FC = () => {
         if (recognitionRef.current) recognitionRef.current.stop();
 
         const recognition = new window.webkitSpeechRecognition();
-        recognition.continuous = mode === 'copilot';
+        recognition.continuous = false; 
         recognition.interimResults = true;
         recognition.lang = recognitionLang;
 
         recognition.onstart = () => setIsListening(true);
-        recognition.onend = () => {
-            setIsListening(false);
-            if (isSessionActiveRef.current && appMode === 'copilot') {
-                recognitionRef.current?.start(); // Auto-restart if it stops unexpectedly
-            }
-        };
+        recognition.onend = () => setIsListening(false);
         recognition.onerror = (event: any) => {
             console.error('Speech recognition error:', event.error);
             if (event.error === 'not-allowed') {
                 setAppError(translations.errorMicPermission);
                 isSessionActiveRef.current = false;
-            } else if (event.error === 'no-speech') {
-                // This error is common and doesn't require a user-facing error message.
-            } else if (event.error !== 'aborted') {
+            } else if (event.error !== 'aborted' && event.error !== 'no-speech') {
                 setAppError(translations.errorSpeechRecognition);
             }
         };
         
         recognition.onresult = (event) => {
-            let interimTranscript = '';
-            let latestFinalTranscript = '';
+            let interim = '';
+            let final = '';
             for (let i = event.resultIndex; i < event.results.length; ++i) {
-                const transcriptChunk = event.results[i][0].transcript;
                 if (event.results[i].isFinal) {
-                    latestFinalTranscript += transcriptChunk + ' ';
+                    final += event.results[i][0].transcript + ' ';
                 } else {
-                    interimTranscript += transcriptChunk;
+                    interim += event.results[i][0].transcript;
                 }
             }
-
-            setTranscript(interimTranscript);
-
-            if (latestFinalTranscript) {
-                setFinalTranscript(prevTranscript => (prevTranscript + ' ' + latestFinalTranscript).trim());
+            setTranscript(interim);
+            if (final) {
+                setFinalTranscript(prev => (prev + ' ' + final).trim());
             }
         };
         
         recognitionRef.current = recognition;
-    }, [appMode, recognitionLang, translations]);
+    }, [recognitionLang, translations]);
 
     const cleanupSession = useCallback(() => {
         isSessionActiveRef.current = false;
+        
         if (recognitionRef.current) {
-            recognitionRef.current.onend = null; // Prevent auto-restart on intentional stop
+            recognitionRef.current.onend = null;
             recognitionRef.current.stop();
         }
+
+        if (liveProxyRef.current) {
+            liveProxyRef.current.close();
+            liveProxyRef.current = null;
+        }
+        if (audioProcessorRef.current) {
+            audioProcessorRef.current.disconnect();
+            audioProcessorRef.current = null;
+        }
+        if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+            audioContextRef.current.close().catch(e => console.error("Error closing audio context", e));
+            audioContextRef.current = null;
+        }
+
         if (cooldownIntervalRef.current) {
             clearInterval(cooldownIntervalRef.current);
             cooldownIntervalRef.current = null;
         }
-        if (speechPauseTimerRef.current) {
-            clearTimeout(speechPauseTimerRef.current);
-            speechPauseTimerRef.current = null;
-        }
+
         if (audioStream) {
             audioStream.getTracks().forEach(track => track.stop());
             setAudioStream(null);
@@ -305,61 +393,58 @@ const App: React.FC = () => {
     }, [audioStream]);
 
 
-    const handleStartSession = useCallback(async (mode: AppMode, title: string, company: string, cv: string) => {
-        setAppError(null);
-
-        setAppMode(mode);
-        setJobTitle(title);
-        setCompanyName(company);
-        setCvContent(cv);
-        setAppState('session');
-        const startTime = Date.now();
-        setSessionStartTime(startTime);
-        isSessionActiveRef.current = true;
-        setupSpeechRecognition(mode);
-        
-        setIsProcessing(true);
-        if (mode === 'copilot') {
-            chatRef.current = startCopilotSession(title, company, cv, language);
-            setFeedbackTitle(translations.aiTalkingPoints);
-            recognitionRef.current?.start();
-        } else {
-            chatRef.current = startPracticeSession(title, company, cv, language);
-            const response: PracticeResponse = await getPracticeResponse(chatRef.current, undefined, language);
-            if(response.question) {
-                setConversation([{ role: Role.MODEL, text: response.question }]);
-            }
-            setPracticeState('asking');
-        }
-        setIsProcessing(false);
-    }, [setupSpeechRecognition, language, translations]);
-    
     const initiateSessionStart = useCallback(async (mode: AppMode, title: string, company: string, cv: string) => {
         setAppError(null);
 
         try {
             let stream: MediaStream;
             if (mode === 'copilot') {
-                // For copilot, capture tab audio to hear the interviewer.
-                stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: true, // Required to prompt for tab selection.
-                    audio: true,
-                });
-
+                stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: { sampleRate: 16000 } });
                 if (stream.getAudioTracks().length === 0) {
-                    stream.getVideoTracks().forEach(track => track.stop()); // Clean up video track.
+                    stream.getVideoTracks().forEach(track => track.stop());
                     setAppError(translations.errorAudioSharing);
                     return;
                 }
-                // We don't need the video, so stop the track for efficiency.
                 stream.getVideoTracks().forEach(track => track.stop());
             } else {
-                // For practice, capture the user's microphone.
                 stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             }
             
             setAudioStream(stream);
-            handleStartSession(mode, title, company, cv);
+            setAppMode(mode);
+            setJobTitle(title);
+            setCompanyName(company);
+            setCvContent(cv);
+            setAppState('session');
+            setSessionStartTime(Date.now());
+            isSessionActiveRef.current = true;
+            
+            if (mode === 'copilot') {
+                setFeedbackTitle(translations.aiTalkingPoints);
+                setupCopilotLiveTranscription(stream);
+            } else {
+                setupSpeechRecognition();
+                setIsProcessing(true);
+                const responseStream = getPracticeResponseStream(title, company, cv, [], undefined, language);
+                const placeholder: ConversationItem = { role: Role.MODEL, text: '' };
+                setConversation([placeholder]);
+
+                let fullResponse = '';
+                for await (const chunk of responseStream) {
+                    fullResponse += chunk;
+                    setConversation(prev => {
+                        const newConversation = [...prev];
+                        newConversation[newConversation.length - 1].text = fullResponse;
+                        return newConversation;
+                    });
+                }
+                 setPracticeHistory([
+                    { role: 'user', parts: [{ text: language === 'id' ? "Tolong ajukan pertanyaan pertama." : "Please ask me the first question." }] },
+                    { role: 'model', parts: [{ text: fullResponse }] }
+                ]);
+                setPracticeState('asking');
+                setIsProcessing(false);
+            }
 
         } catch (err: any) {
             console.error("Media stream acquisition error:", err);
@@ -370,111 +455,16 @@ const App: React.FC = () => {
                 setAppError(translations.errorMediaAccess);
             }
         }
-    }, [handleStartSession, translations]);
-
-    const reconstructPracticeHistory = (conv: ConversationItem[]): Content[] => {
-        const history: Content[] = [];
-        if (conv.length === 0) return history;
+    }, [language, translations, setupCopilotLiveTranscription, setupSpeechRecognition]);
     
-        const firstQuestionMsg = language === 'id' ? "Tolong ajukan pertanyaan pertama." : "Please ask me the first question.";
-        history.push({ role: 'user', parts: [{ text: firstQuestionMsg }] });
-        const firstModelResponse = conv[0];
-        history.push({ role: 'model', parts: [{ text: JSON.stringify({ question: firstModelResponse.text, feedback: null, rating: null }) }] });
-    
-        for (let i = 1; i < conv.length; i += 2) {
-            const userAnswer = conv[i];
-            const modelFeedbackAndQuestion = conv[i + 1];
-    
-            if (userAnswer && userAnswer.role === Role.USER) {
-                 const userAnswerMsg = language === 'id' 
-                    ? `Ini jawaban saya: "${userAnswer.text}". Mohon berikan umpan balik, peringkat, dan pertanyaan berikutnya.`
-                    : `Here is my answer: "${userAnswer.text}". Please provide feedback, a rating, and the next question.`;
-                history.push({ role: 'user', parts: [{ text: userAnswerMsg }] });
-            }
-    
-            if (modelFeedbackAndQuestion && modelFeedbackAndQuestion.role === Role.MODEL) {
-                 history.push({ role: 'model', parts: [{ text: JSON.stringify({
-                     feedback: modelFeedbackAndQuestion.feedback,
-                     rating: modelFeedbackAndQuestion.rating,
-                     question: modelFeedbackAndQuestion.text
-                 }) }] });
-            }
-        }
-        return history;
-    }
-    
-    const handleRestoreSession = useCallback(async (session: InProgressSession) => {
-        setAppError(null);
-
-        try {
-            let stream: MediaStream;
-            if (session.mode === 'copilot') {
-                stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-                if (stream.getAudioTracks().length === 0) {
-                    stream.getVideoTracks().forEach(track => track.stop());
-                    clearInProgressSession();
-                    setAppError(translations.errorRestoreNoAudio);
-                    setAppState('welcome');
-                    return;
-                }
-                stream.getVideoTracks().forEach(track => track.stop());
-            } else {
-                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            }
-            setAudioStream(stream);
-        } catch (err: any) {
-             console.error("Media stream acquisition error on restore:", err);
-             clearInProgressSession();
-             if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-                 const modeText = session.mode === 'copilot' ? translations.tabAudio : translations.microphone;
-                 setAppError(translations.errorRestorePermission(modeText));
-             } else {
-                 setAppError(translations.errorRestoreMedia);
-             }
-             setAppState('welcome');
-             return;
-        }
-
-        setAppMode(session.mode);
-        setJobTitle(session.jobTitle);
-        setCompanyName(session.companyName);
-        setCvContent(session.cvContent);
-        setConversation(session.conversation);
-        setSessionStartTime(session.startTime);
-        setAppState('session');
-        isSessionActiveRef.current = true;
-
-        setupSpeechRecognition(session.mode);
-        setIsProcessing(true);
-
-        if (session.mode === 'copilot') {
-            chatRef.current = startCopilotSession(session.jobTitle, session.companyName, session.cvContent, language);
-            recognitionRef.current?.start();
-        } else {
-            const history = reconstructPracticeHistory(session.conversation);
-            chatRef.current = restorePracticeSession(session.jobTitle, session.companyName, session.cvContent, history, language);
-            
-            const lastMessage = session.conversation[session.conversation.length - 1];
-            if (lastMessage?.role === Role.MODEL) {
-                setPracticeState('asking');
-            } else {
-                 setPracticeState('feedback');
-            }
-        }
-        setIsProcessing(false);
-    }, [setupSpeechRecognition, language, translations]);
-    
+    // Restore session logic is removed as it adds complexity with the new backend architecture.
+    // A fresh start is cleaner. Users are prompted to save sessions at the end.
     useEffect(() => {
         const inProgressSession = getInProgressSession();
         if (inProgressSession) {
-            const lastActive = new Date(inProgressSession.startTime).toLocaleString(language === 'id' ? 'id-ID' : 'en-US');
-            if (window.confirm(translations.confirmRestoreSession(lastActive))) {
-                handleRestoreSession(inProgressSession);
-            } else {
-                clearInProgressSession();
-            }
+            clearInProgressSession(); // Clear any stale session data on page load.
         }
-    }, [handleRestoreSession, language, translations]);
+    }, []);
 
     useEffect(() => {
         if (appState === 'session' && sessionStartTime) {
@@ -490,17 +480,8 @@ const App: React.FC = () => {
         }
     }, [conversation, appState, sessionStartTime, jobTitle, companyName, cvContent, appMode]);
     
-    const handleGenerateSuggestion = useCallback(() => {
-        if (speechPauseTimerRef.current) clearTimeout(speechPauseTimerRef.current);
-        speechPauseTimerRef.current = null;
-        processCopilotRequest('talkingPoints');
-    }, [processCopilotRequest]);
-
-    const handleGenerateExampleAnswer = useCallback(() => {
-        if (speechPauseTimerRef.current) clearTimeout(speechPauseTimerRef.current);
-        speechPauseTimerRef.current = null;
-        processCopilotRequest('exampleAnswer');
-    }, [processCopilotRequest]);
+    const handleGenerateSuggestion = useCallback(() => processCopilotRequest('talkingPoints'), [processCopilotRequest]);
+    const handleGenerateExampleAnswer = useCallback(() => processCopilotRequest('exampleAnswer'), [processCopilotRequest]);
 
     const handleStartListening = () => {
         setAppError(null);
@@ -513,37 +494,77 @@ const App: React.FC = () => {
     const handleStopListening = useCallback(async () => {
         isSessionActiveRef.current = false;
         recognitionRef.current?.stop();
-        if (!finalTranscript.trim() || !chatRef.current) {
+        const userAnswer = finalTranscript.trim();
+        if (!userAnswer) {
             setPracticeState('asking'); 
             return;
         }
         
         setIsProcessing(true);
-        const userAnswer = finalTranscript.trim();
         setConversation(prev => [...prev, { role: Role.USER, text: userAnswer }]);
 
-        const response: PracticeResponse = await getPracticeResponse(chatRef.current, userAnswer, language);
+        const stream = getPracticeResponseStream(jobTitle, companyName, cvContent, practiceHistory, userAnswer, language);
+        const placeholder: ConversationItem = { role: Role.MODEL, text: '' };
+        setConversation(prev => [...prev, placeholder]);
 
-        setConversation(prev => [...prev, { 
-            role: Role.MODEL, 
-            text: response.question,
-            feedback: response.feedback ?? undefined,
-            rating: response.rating ?? undefined,
-        }]);
+        let fullResponse = '';
+        for await (const chunk of stream) {
+            fullResponse += chunk;
+            setConversation(prev => {
+                const newConversation = [...prev];
+                const lastItem = newConversation[newConversation.length - 1];
+                if(lastItem) {
+                    const { feedback, rating, question } = parsePracticeResponse(fullResponse, language);
+                    lastItem.text = question;
+                    lastItem.feedback = feedback;
+                    lastItem.rating = rating;
+                }
+                return newConversation;
+            });
+        }
+        
+        const userAnswerMsg = language === 'id' 
+            ? `Ini jawaban saya: "${userAnswer}". Mohon berikan umpan balik, peringkat, dan pertanyaan berikutnya dalam format yang ditentukan.`
+            : `Here is my answer: "${userAnswer}". Please provide feedback, a rating, and the next question in the specified format.`;
+
+        setPracticeHistory(prev => [...prev, 
+            { role: 'user', parts: [{ text: userAnswerMsg }] },
+            { role: 'model', parts: [{ text: fullResponse }] },
+        ]);
         
         setPracticeState('feedback');
         setTranscript('');
         setFinalTranscript('');
         setIsProcessing(false);
         isSessionActiveRef.current = true;
-    }, [finalTranscript, language]);
+    }, [finalTranscript, language, jobTitle, companyName, cvContent, practiceHistory]);
 
-    const handleNextQuestion = async () => {
-       if (!chatRef.current) return;
-       setIsProcessing(true);
-       setPracticeState('asking');
-       setIsProcessing(false);
-    };
+    const handleGetPracticeExampleAnswer = useCallback(async () => {
+        if (isProcessing) return;
+        const lastQuestionItem = [...conversation].reverse().find(item => item.role === Role.MODEL);
+        if (!lastQuestionItem) return;
+
+        setIsProcessing(true);
+        setAppError(null);
+
+        const placeholder: ConversationItem = { role: Role.USER, type: 'exampleAnswer', text: '' };
+        setConversation(prev => [...prev, placeholder]);
+        const stream = getPracticeExampleAnswerStream(jobTitle, companyName, cvContent, lastQuestionItem.text, language);
+        let fullResponse = '';
+
+        for await (const chunk of stream) {
+            fullResponse += chunk;
+            setConversation(prev => {
+                const newConv = [...prev];
+                const last = newConv[newConv.length - 1];
+                if (last) last.text = fullResponse;
+                return newConv;
+            });
+        }
+        setIsProcessing(false);
+    }, [isProcessing, conversation, jobTitle, companyName, cvContent, language]);
+
+    const handleNextQuestion = () => setPracticeState('asking');
 
     const handleEndSession = useCallback(async () => {
         cleanupSession();
@@ -586,18 +607,16 @@ const App: React.FC = () => {
         setActiveQuestion('');
         setCopilotCache(null);
         setAppError(null);
-        chatRef.current = null;
         setIsOnCooldown(false);
         setCooldownSeconds(0);
+        setPracticeHistory([]);
     }, [cleanupSession]);
 
     const handleShowHistory = () => setAppState('history');
-
     const handleClearHistory = () => {
         clearSessions();
         setSessions([]);
     };
-
     const handleLanguageChange = (lang: Language) => {
         setLanguage(lang);
         setRecognitionLang(lang === 'id' ? 'id-ID' : 'en-US');
@@ -608,7 +627,7 @@ const App: React.FC = () => {
             case 'welcome':
                 return <WelcomeScreen translations={translations} onStart={initiateSessionStart} onShowHistory={handleShowHistory} hasHistory={sessions.length > 0} onOpenSettings={() => setIsSettingsOpen(true)}/>;
             case 'session': {
-                if (!sessionStartTime) return null; // Should not happen
+                if (!sessionStartTime) return null; 
 
                 let practiceFeedbackContent: string | null = null;
                 let practiceFeedbackRating: ConversationItem['rating'] | null = null;
@@ -626,23 +645,14 @@ const App: React.FC = () => {
                         <div className="flex-1 flex flex-col">
                             <Conversation conversation={conversation} isProcessing={isProcessing} appMode={appMode} translations={translations}/>
                             <Controls 
-                                translations={translations}
-                                mode={appMode}
-                                isProcessing={isProcessing}
-                                onEndSession={handleEndSession}
-                                finalTranscript={finalTranscript}
-                                interimTranscript={transcript}
-                                // Copilot
-                                onGenerate={handleGenerateSuggestion}
-                                onGenerateExample={handleGenerateExampleAnswer}
-                                isOnCooldown={isOnCooldown}
-                                cooldownSeconds={cooldownSeconds}
-                                // Practice
-                                practiceState={practiceState}
-                                isListening={isListening}
-                                onStartListening={handleStartListening}
-                                onStopListening={handleStopListening}
-                                onNextQuestion={handleNextQuestion}
+                                translations={translations} mode={appMode} isProcessing={isProcessing}
+                                onEndSession={handleEndSession} finalTranscript={finalTranscript}
+                                interimTranscript={transcript} isListening={isListening}
+                                onGenerate={handleGenerateSuggestion} onGenerateExample={handleGenerateExampleAnswer}
+                                isOnCooldown={isOnCooldown} cooldownSeconds={cooldownSeconds}
+                                practiceState={practiceState} onStartListening={handleStartListening}
+                                onStopListening={handleStopListening} onNextQuestion={handleNextQuestion}
+                                onGetExampleAnswer={handleGetPracticeExampleAnswer}
                             />
                         </div>
                         <Feedback 
@@ -650,24 +660,16 @@ const App: React.FC = () => {
                             title={appMode === 'copilot' ? feedbackTitle : translations.aiFeedback}
                             content={appMode === 'copilot' ? feedbackContent : practiceFeedbackContent}
                             rating={appMode === 'copilot' ? null : practiceFeedbackRating}
-                            sessionStartTime={sessionStartTime}
-                            onOpenSettings={() => setIsSettingsOpen(true)}
-                            audioStream={audioStream}
-                            finalTranscript={finalTranscript}
-                            interimTranscript={transcript}
+                            sessionStartTime={sessionStartTime} onOpenSettings={() => setIsSettingsOpen(true)}
+                            audioStream={audioStream} finalTranscript={finalTranscript} interimTranscript={transcript}
                         />
                     </div>
                 );
             }
             case 'summary':
                  return summaryReport ? <SummaryScreen 
-                    translations={translations}
-                    summary={summaryReport} 
-                    onRestart={handleResetApp}
-                    conversation={conversation}
-                    appMode={appMode}
-                    jobTitle={jobTitle}
-                    companyName={companyName}
+                    translations={translations} summary={summaryReport} onRestart={handleResetApp}
+                    conversation={conversation} appMode={appMode} jobTitle={jobTitle} companyName={companyName}
                   /> : null;
             case 'history':
                 return <HistoryScreen translations={translations} sessions={sessions} onBack={handleResetApp} onClear={handleClearHistory} />;
@@ -681,15 +683,10 @@ const App: React.FC = () => {
              <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-gray-900 via-gray-900 to-black -z-10"></div>
             {appError && <ErrorDisplay message={appError} onDismiss={() => setAppError(null)} />}
             <SettingsPanel 
-                translations={translations}
-                isOpen={isSettingsOpen}
-                onClose={() => setIsSettingsOpen(false)}
-                language={language}
-                onLanguageChange={handleLanguageChange}
-                recognitionLang={recognitionLang}
-                onRecognitionLangChange={setRecognitionLang}
-                isAutoTriggerEnabled={isAutoTriggerEnabled}
-                onIsAutoTriggerEnabledChange={setIsAutoTriggerEnabled}
+                translations={translations} isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)}
+                language={language} onLanguageChange={handleLanguageChange}
+                recognitionLang={recognitionLang} onRecognitionLangChange={setRecognitionLang}
+                isAutoTriggerEnabled={isAutoTriggerEnabled} onIsAutoTriggerEnabledChange={setIsAutoTriggerEnabled}
             />
             <ErrorBoundary onReset={handleResetApp}>
               {renderContent()}

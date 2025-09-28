@@ -22,6 +22,7 @@ interface ControlsProps {
     onStartListening?: () => void;
     onStopListening?: () => void;
     onNextQuestion?: () => void;
+    onGetExampleAnswer?: () => void;
     practiceState?: 'asking' | 'answering' | 'feedback';
 }
 
@@ -40,6 +41,7 @@ const Controls: React.FC<ControlsProps> = ({
     onStartListening,
     onStopListening,
     onNextQuestion,
+    onGetExampleAnswer,
     practiceState
 }) => {
     
@@ -114,14 +116,24 @@ const Controls: React.FC<ControlsProps> = ({
                 </div>
             </div>
             {practiceState === 'asking' && (
-                 <button
-                    onClick={onStartListening}
-                    disabled={isProcessing}
-                    className="flex items-center space-x-2 bg-green-500 hover:bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-full transition-colors duration-300"
-                >
-                    <MicIcon className="w-5 h-5" />
-                    <span>{translations.answerQuestion}</span>
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={onStartListening}
+                        disabled={isProcessing}
+                        className="flex items-center space-x-2 bg-green-500 hover:bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-full transition-colors duration-300"
+                    >
+                        <MicIcon className="w-5 h-5" />
+                        <span>{translations.answerQuestion}</span>
+                    </button>
+                    <button
+                        onClick={onGetExampleAnswer}
+                        disabled={isProcessing}
+                        className="flex items-center space-x-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-full transition-colors duration-300 transform hover:scale-105"
+                    >
+                        <SparklesIcon className="w-5 h-5" />
+                        <span>{translations.exampleAnswer}</span>
+                    </button>
+                </div>
             )}
              {practiceState === 'answering' && (
                 <button
