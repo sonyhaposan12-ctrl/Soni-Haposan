@@ -6,37 +6,7 @@ import { ConversationItem } from '../types';
 import RealtimeMonitor from './RealtimeMonitor';
 import TimerDisplay from './TimerDisplay';
 import { T } from '../translations';
-
-interface FeedbackProps {
-    title: string;
-    content: string | null;
-    rating: ConversationItem['rating'] | null;
-    onOpenSettings: () => void;
-    sessionStartTime: number;
-    audioStream: MediaStream | null;
-    finalTranscript?: string;
-    interimTranscript?: string;
-    translations: typeof T['en'];
-}
-
-declare global {
-    interface Window {
-        marked: {
-            parse: (markdown: string, options?: object) => string;
-        };
-    }
-}
-
-const parseMarkdown = (text: string | null): string => {
-    if (!text) return '';
-    if (window.marked) {
-        // Use GFM and breaks for better formatting of typical AI responses.
-        return window.marked.parse(text, { breaks: true, gfm: true });
-    }
-    // Simple fallback if marked.js fails to load.
-    return text.replace(/\n/g, '<br />');
-};
-
+import { parseMarkdown } from '../services/geminiService';
 
 const getRatingClass = (rating: ConversationItem['rating']) => {
     switch (rating) {
@@ -53,6 +23,19 @@ const getRatingClass = (rating: ConversationItem['rating']) => {
             return 'bg-gray-600/20 text-gray-300 border-gray-500/30';
     }
 };
+
+// Fix: Added FeedbackProps interface to resolve 'Cannot find name' error.
+interface FeedbackProps {
+    title: string;
+    content: string | null;
+    rating: ConversationItem['rating'] | null;
+    onOpenSettings: () => void;
+    sessionStartTime: number;
+    audioStream: MediaStream | null;
+    finalTranscript?: string;
+    interimTranscript?: string;
+    translations: typeof T['en'];
+}
 
 const Feedback: React.FC<FeedbackProps> = ({ title, content, rating, onOpenSettings, sessionStartTime, audioStream, finalTranscript, interimTranscript, translations }) => {
     const isError = content?.toLowerCase().startsWith('error:') || content?.toLowerCase().startsWith('kesalahan:');

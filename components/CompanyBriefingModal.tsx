@@ -4,6 +4,7 @@ import LightbulbIcon from './icons/LightbulbIcon';
 import SpinnerIcon from './icons/SpinnerIcon';
 import ExclamationIcon from './icons/ExclamationIcon';
 import { T } from '../translations';
+import { parseMarkdown } from '../services/geminiService';
 
 interface CompanyBriefingModalProps {
     isOpen: boolean;
@@ -14,22 +15,6 @@ interface CompanyBriefingModalProps {
     error: string | null;
     translations: typeof T['en'];
 }
-
-declare global {
-    interface Window {
-        marked: {
-            parse: (markdown: string, options?: object) => string;
-        };
-    }
-}
-
-const parseMarkdown = (text: string | null): string => {
-    if (!text) return '';
-    if (window.marked) {
-        return window.marked.parse(text, { breaks: true, gfm: true });
-    }
-    return text.replace(/\n/g, '<br />');
-};
 
 const CompanyBriefingModal: React.FC<CompanyBriefingModalProps> = ({ isOpen, onClose, companyName, briefingData, isLoading, error, translations }) => {
     if (!isOpen) return null;

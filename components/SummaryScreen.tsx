@@ -5,6 +5,7 @@ import StarIcon from './icons/StarIcon';
 import TranscriptModal from './TranscriptModal';
 import { ConversationItem, AppMode } from '../types';
 import { T } from '../translations';
+import { parseMarkdown } from '../services/geminiService';
 
 interface SummaryScreenProps {
   summary: string;
@@ -15,24 +16,6 @@ interface SummaryScreenProps {
   companyName: string;
   translations: typeof T['en'];
 }
-
-declare global {
-    interface Window {
-        marked: {
-            parse: (markdown: string, options?: object) => string;
-        };
-    }
-}
-
-const parseMarkdown = (text: string | null): string => {
-    if (!text) return '';
-    if (window.marked) {
-        // Use GFM and breaks for better formatting of typical AI responses.
-        return window.marked.parse(text, { breaks: true, gfm: true });
-    }
-    // Simple fallback if marked.js fails to load.
-    return text.replace(/\n/g, '<br />');
-};
 
 const SummaryScreen: React.FC<SummaryScreenProps> = ({ summary, onRestart, conversation, appMode, jobTitle, companyName, translations }) => {
   const [feedbackText, setFeedbackText] = useState('');

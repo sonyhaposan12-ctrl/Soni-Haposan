@@ -2,31 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { ConversationItem, Role, AppMode } from '../types';
 import StarIcon from './icons/StarIcon';
 import { T } from '../translations';
-
-interface ConversationProps {
-    conversation: ConversationItem[];
-    isProcessing: boolean;
-    appMode: AppMode;
-    translations: typeof T['en'];
-}
-
-declare global {
-    interface Window {
-        marked: {
-            parse: (markdown: string, options?: object) => string;
-        };
-    }
-}
-
-const parseMarkdown = (text: string | null): string => {
-    if (!text) return '';
-    if (window.marked) {
-        // Use GFM and breaks for better formatting of typical AI responses.
-        return window.marked.parse(text, { breaks: true, gfm: true });
-    }
-    // Simple fallback if marked.js fails to load.
-    return text.replace(/\n/g, '<br />');
-};
+import { parseMarkdown } from '../services/geminiService';
 
 const getRatingClass = (rating: ConversationItem['rating']) => {
     switch (rating) {
@@ -119,6 +95,13 @@ const ConversationMessage: React.FC<{ item: ConversationItem, appMode: AppMode, 
 
 // Fix: The Conversation component was corrupted, missing its implementation and default export.
 // It has been restored to correctly render messages, handle scrolling, and display a loading indicator.
+// Fix: Added ConversationProps interface to resolve 'Cannot find name' error.
+interface ConversationProps {
+    conversation: ConversationItem[];
+    isProcessing: boolean;
+    appMode: AppMode;
+    translations: typeof T['en'];
+}
 const Conversation: React.FC<ConversationProps> = ({ conversation, isProcessing, appMode, translations }) => {
     const endOfMessagesRef = useRef<HTMLDivElement | null>(null);
 

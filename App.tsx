@@ -132,6 +132,7 @@ const App: React.FC = () => {
     const [feedbackContent, setFeedbackContent] = useState<string | null>(null);
     const [feedbackTitle, setFeedbackTitle] = useState<string>('AI Talking Points');
     const [activeQuestion, setActiveQuestion] = useState('');
+    const [questionForAI, setQuestionForAI] = useState('');
     const [copilotCache, setCopilotCache] = useState<{ question: string; talkingPoints: string; exampleAnswer: string; } | null>(null);
     const [isOnCooldown, setIsOnCooldown] = useState(false);
     const [cooldownSeconds, setCooldownSeconds] = useState(0);
@@ -184,7 +185,7 @@ const App: React.FC = () => {
     }, [isOnCooldown]);
 
     const processCopilotRequest = useCallback(async (type: 'talkingPoints' | 'exampleAnswer') => {
-        const question = finalTranscript.trim() || activeQuestion;
+        const question = questionForAI.trim();
         if (!question) return;
 
         setAppError(null);
@@ -247,11 +248,12 @@ const App: React.FC = () => {
         }
         
         setIsProcessing(false);
-        setTranscript('');
-        setFinalTranscript('');
-    }, [finalTranscript, activeQuestion, copilotCache, conversation, language, jobTitle, companyName, cvContent, translations.talkingPoints, translations.exampleAnswer, startCooldown]);
+        setQuestionForAI(''); // Reset the AI trigger
+    }, [questionForAI, copilotCache, conversation, language, jobTitle, companyName, cvContent, translations.talkingPoints, translations.exampleAnswer, startCooldown]);
 
     const setupCopilotLiveTranscription = useCallback((stream: MediaStream) => {
+        let currentTurnTranscript = ''; // This local variable accumulates the final transcript for the current turn.
+
         const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
         audioContextRef.current = inputAudioContext;
         
@@ -259,11 +261,11 @@ const App: React.FC = () => {
         const scriptProcessor = inputAudioContext.createScriptProcessor(4096, 1, 1);
         audioProcessorRef.current = scriptProcessor;
 
-        let currentTurnTranscript = '';
-
         liveProxyRef.current = connectLiveProxy({
             onOpen: () => {
                 setIsListening(true);
+                setFinalTranscript('');
+                setTranscript('');
             },
             onMessage: (message) => {
                 if (message.type === 'live_message') {
@@ -272,15 +274,18 @@ const App: React.FC = () => {
                         const { text, isFinal } = liveMessage.serverContent.inputTranscription;
                         if (isFinal) {
                             currentTurnTranscript += text;
+                            setFinalTranscript(currentTurnTranscript); // Update final part of display
+                            setTranscript(''); // Clear interim part
+                        } else {
+                            setTranscript(text); // Update interim part of display
                         }
-                        setTranscript(currentTurnTranscript + (isFinal ? '' : text));
                     }
                     if (liveMessage.serverContent?.turnComplete) {
-                        if (currentTurnTranscript.trim()) {
-                            setFinalTranscript(currentTurnTranscript.trim());
+                        const finalQuestion = currentTurnTranscript.trim();
+                        if (finalQuestion) {
+                            setQuestionForAI(finalQuestion); // Trigger the AI with the complete question
                         }
-                        currentTurnTranscript = '';
-                        setTranscript('');
+                        currentTurnTranscript = ''; // Reset for the next turn
                     }
                 } else if (message.type === 'live_error') {
                      console.error('Live session error from backend:', message.payload);
@@ -308,14 +313,14 @@ const App: React.FC = () => {
     }, [translations.errorSpeechRecognition]);
     
     useEffect(() => {
-        if (appState !== 'session' || appMode !== 'copilot' || !isAutoTriggerEnabled || !finalTranscript.trim()) {
+        if (appState !== 'session' || appMode !== 'copilot' || !isAutoTriggerEnabled || !questionForAI.trim()) {
             return;
         }
         if (!isProcessing) {
             processCopilotRequest('talkingPoints');
         }
     
-    }, [finalTranscript, appState, appMode, isAutoTriggerEnabled, isProcessing, processCopilotRequest]);
+    }, [questionForAI, appState, appMode, isAutoTriggerEnabled, isProcessing, processCopilotRequest]);
 
     const setupSpeechRecognition = useCallback(() => {
         if (!('webkitSpeechRecognition' in window)) {

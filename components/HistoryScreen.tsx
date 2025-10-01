@@ -7,6 +7,7 @@ import ChevronRightIcon from './icons/ChevronRightIcon';
 import TranscriptModal from './TranscriptModal';
 import DownloadIcon from './icons/DownloadIcon';
 import { T } from '../translations';
+import { parseMarkdown } from '../services/geminiService';
 
 interface HistoryScreenProps {
   sessions: SavedSession[];
@@ -14,22 +15,6 @@ interface HistoryScreenProps {
   onClear: () => void;
   translations: typeof T['en'];
 }
-
-declare global {
-    interface Window {
-        marked: {
-            parse: (markdown: string, options?: object) => string;
-        };
-    }
-}
-
-const parseMarkdown = (text: string | null): string => {
-    if (!text) return '';
-    if (window.marked) {
-        return window.marked.parse(text, { breaks: true, gfm: true });
-    }
-    return text.replace(/\n/g, '<br />');
-};
 
 const HistoryScreen: React.FC<HistoryScreenProps> = ({ sessions, onBack, onClear, translations }) => {
   const [selectedSession, setSelectedSession] = useState<SavedSession | null>(sessions[0] || null);
