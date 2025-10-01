@@ -184,8 +184,8 @@ const App: React.FC = () => {
         }, 1000);
     }, [isOnCooldown]);
 
-    const processCopilotRequest = useCallback(async (type: 'talkingPoints' | 'exampleAnswer') => {
-        const question = questionForAI.trim();
+    const processCopilotRequest = useCallback(async (type: 'talkingPoints' | 'exampleAnswer', questionToProcess?: string) => {
+        const question = (questionToProcess ?? questionForAI).trim();
         if (!question) return;
 
         setAppError(null);
@@ -485,8 +485,20 @@ const App: React.FC = () => {
         }
     }, [conversation, appState, sessionStartTime, jobTitle, companyName, cvContent, appMode]);
     
-    const handleGenerateSuggestion = useCallback(() => processCopilotRequest('talkingPoints'), [processCopilotRequest]);
-    const handleGenerateExampleAnswer = useCallback(() => processCopilotRequest('exampleAnswer'), [processCopilotRequest]);
+    const handleGenerateSuggestion = useCallback(() => {
+        const question = (finalTranscript + ' ' + transcript).trim();
+        if (question && !isProcessing) {
+            setQuestionForAI(question);
+            processCopilotRequest('talkingPoints', question);
+        }
+    }, [finalTranscript, transcript, isProcessing, processCopilotRequest]);
+
+    const handleGenerateExampleAnswer = useCallback(() => {
+        const question = activeQuestion.trim();
+        if (question && !isProcessing) {
+            processCopilotRequest('exampleAnswer', question);
+        }
+    }, [activeQuestion, isProcessing, processCopilotRequest]);
 
     const handleStartListening = () => {
         setAppError(null);
